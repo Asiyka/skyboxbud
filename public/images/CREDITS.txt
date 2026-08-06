@@ -1,0 +1,7 @@
+warehouse.jpg — Photo by Hemerson Coelho on Unsplash
+small-crates.jpg — Photo by Jonathan Kemper on Unsplash
+medium-crates.jpg — Photo by Terra Slaybaugh on Unsplash
+large-crates.jpg — Photo by Nareeta Martin on Unsplash
+custom-crates.jpg — Photo by Haberdoedas on Unsplash
+
+Ліцензія: Unsplash License — https://unsplash.com/license
