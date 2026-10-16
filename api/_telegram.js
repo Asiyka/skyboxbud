@@ -28,8 +28,9 @@ export const STATUSES = {
   declined: { emoji: "❌", title: "Відмова", label: "Відмова", tag: "відмова", group: "closed" },
 };
 
-/* «⏰ Нагадати» — кнопка типу web_app: відкриває міні-застосунок без підтвердження.
-   Якщо WEBAPP_URL не задано — залишається видиме посилання в тексті (старий fallback). */
+/* «⏰ Пізніше» — не кнопка, а видиме посилання в тексті заявки (APP_MARK): inline_keyboard web_app
+   не працюють в каналах (Telegram ігнорує їх мовчки). Текстове посилання — підтвердження
+   лише першого разу (домен кешується), далі — відкривається без запиту. */
 const LAYOUT = [
   ["called", "noanswer"],
   ["deal", "declined"],
@@ -97,33 +98,26 @@ async function botUsername(env) {
 }
 
 /* «⏰ Нагадати» відкриває міні-застосунок «Дата й час» (public/tg-remind.html).
-   start_param дозволяє лише [A-Za-z0-9_-]: id заявки + імʼя клієнта в base64url (для заголовка).
-   WEBAPP_URL — прямий HTTPS URL до сторінки міні-застосунку (напр. https://my-app.vercel.app/tg-remind.html).
-   web_app-кнопка відкриває застосунок без підтвердження; t.me-посилання — fallback якщо URL не задано. */
+   start_param дозволяє лише [A-Za-z0-9_-]: id заявки + імʼя клієнта в base64url (для заголовка). */
 const b64url = (s) => Buffer.from(s, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const startParam = (leadId, client) => `${leadId}_${b64url(client.slice(0, 40))}`.slice(0, 500);
 
-async function miniAppUrls(env, leadId, client) {
+async function miniAppUrl(env, leadId, client) {
   const param = startParam(leadId, client);
   const bot = await botUsername(env);
-  const textUrl = env.TELEGRAM_APP_NAME
+  return env.TELEGRAM_APP_NAME
     ? `t.me/${bot}/${env.TELEGRAM_APP_NAME}?startapp=${param}`
     : `t.me/${bot}?startapp=${param}`;
-  const webAppUrl = env.WEBAPP_URL ? `${env.WEBAPP_URL.replace(/\/$/, "")}?startapp=${param}` : null;
-  return { textUrl, webAppUrl };
 }
 
-/** Кнопки під заявкою. webAppUrl — якщо задано, додає кнопку «⏰ Нагадати» (web_app, без підтвердження). */
-export function leadKeyboard(current, webAppUrl) {
+/** Кнопки під заявкою. */
+export function leadKeyboard(current) {
   const rows = LAYOUT.map((row) =>
     row.map((key) => {
       const s = STATUSES[key];
       return { text: `${key === current ? "✔︎ " : ""}${s.emoji} ${s.label}`, callback_data: `st:${key}` };
     })
   );
-  if (webAppUrl) {
-    rows.push([{ text: "⏰ Нагадати", web_app: { url: webAppUrl } }]);
-  }
   rows.push([{ text: "📝 Нотатка", callback_data: "nt" }]);
   return { inline_keyboard: rows };
 }
@@ -223,16 +217,14 @@ export function leadMessage(lead) {
 }
 
 async function editLead(env, chat, id, m) {
-  const { textUrl, webAppUrl } = await miniAppUrls(env, id, clientName(m));
-  // Якщо є web_app-кнопка — не потрібне посилання в тексті; залишаємо для fallback.
-  m.app = webAppUrl ? null : esc(textUrl);
+  m.app = esc(await miniAppUrl(env, id, clientName(m)));
   return call(env, "editMessageText", {
     chat_id: chat,
     message_id: id,
     text: render(m),
     parse_mode: "HTML",
     disable_web_page_preview: true,
-    reply_markup: leadKeyboard(m.status, webAppUrl),
+    reply_markup: leadKeyboard(m.status),
   });
 }
 
