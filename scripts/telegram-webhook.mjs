@@ -1,7 +1,7 @@
 /* Підключити кнопки статусів на робочому сайті (один раз після деплою):
      npm run tg:webhook -- https://ваш-сайт.vercel.app
    Перевірити поточний стан:   npm run tg:webhook -- info
-   Відключити (для локальних тестів через tg:poll):   npm run tg:webhook -- delete
+   Відключити вручну (зазвичай не треба — npm run tg:local робить це сам):   npm run tg:webhook -- delete
 
    Бере TELEGRAM_BOT_TOKEN і TELEGRAM_WEBHOOK_SECRET з .env.local —
    той самий секрет має бути заданий у Vercel → Environment Variables. */

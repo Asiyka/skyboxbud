@@ -1,5 +1,6 @@
 /* ============================================================
-   Telegram-бот заявок: формат повідомлення, кнопки статусів, нотатки, нагадування.
+   Telegram-бот заявок: формат повідомлення, кнопки статусів, нотатки, нагадування
+   (день і час обирають у міні-застосунку public/tg-remind.html).
    Без бази даних: стан заявки живе в самому повідомленні, а список
    нагадувань — у закріпленому повідомленні каналу.
    Файли з "_" Vercel не робить ендпоінтами.
@@ -10,7 +11,7 @@
      TELEGRAM_WEBHOOK_SECRET — секрет для вебхука Telegram і для /api/cron
    ============================================================ */
 
-import { MIN, HOUR, kyiv, kyivAt, kyivDayAt, fmtWhen, fmtShort, parseShort, parseWhen } from "./_time.js";
+import { MIN, HOUR, kyiv, kyivAt, fmtWhen, fmtShort, parseShort } from "./_time.js";
 
 export const GROUPS = {
   open: { tag: "відкрита", dot: "🟠" },
@@ -27,29 +28,21 @@ export const STATUSES = {
   declined: { emoji: "❌", title: "Відмова", label: "Відмова", tag: "відмова", group: "closed" },
 };
 
+/* «⏰ Нагадати» — кнопка типу web_app: відкриває міні-застосунок без підтвердження.
+   Якщо WEBAPP_URL не задано — залишається видиме посилання в тексті (старий fallback). */
 const LAYOUT = [
   ["called", "noanswer"],
-  ["later", "deal", "declined"],
+  ["deal", "declined"],
 ];
-
-const LATER = [
-  { id: "30m", label: "30 хв", at: () => Date.now() + 30 * MIN },
-  { id: "1h", label: "1 год", at: () => Date.now() + HOUR },
-  { id: "3h", label: "3 год", at: () => Date.now() + 3 * HOUR },
-  { id: "tm", label: "Завтра 10:00", at: () => kyivDayAt(1, 10) },
-  { id: "1w", label: "Через тиждень", at: () => kyivDayAt(7, 10) },
-  { id: "no", label: "Без нагадування", at: () => null },
-];
-const LATER_DEV = { id: "1m", label: "⚡ 1 хв (тест)", at: () => Date.now() + MIN };
 
 /* Маркери — за ними бот розпізнає свої повідомлення. */
 const STATUS_MARK = "📌 ";
 const NOTES_MARK = "💬 ";
+const APP_MARK = "⏰ Нагадати: ";
 const NOTE_PROMPT = "✍️ ";
-const TIME_PROMPT = "⏱ ";
 const BOARD_MARK = "📋 ";
 const HISTORY_MAX = 8;
-const BOARD_MAX = 60;
+const BOARD_MAX = 100; // скільки нагадувань вміщає закріплене повідомлення (ліміт Telegram — 4096 символів)
 const TG_LIMIT = 4000;
 const PROMPT_TTL = 15 * 60; // сек: запит бота «протухає» через 15 хв
 const THANKS_DELAY = 2500; // мс: скільки висить «Дякую» перед прибиранням
@@ -96,21 +89,6 @@ async function readMessage(env, chat, id, text = "⏳") {
 
 /* ---------- клавіатури ---------- */
 
-export function keyboard(current) {
-  const rows = LAYOUT.map((row) =>
-    row.map((key) => {
-      const s = STATUSES[key];
-      return { text: `${key === current ? "✔︎ " : ""}${s.emoji} ${s.label}`, callback_data: `st:${key}` };
-    })
-  );
-  rows.push([{ text: "📝 Нотатка", callback_data: "nt" }]);
-  return { inline_keyboard: rows };
-}
-
-/* Міні-застосунок «Дата й час» (календар + колесо часу). Вмикається змінною TELEGRAM_MINI_APP=1
-   після того, як у @BotFather увімкнено Mini App з адресою сайту (див. README). */
-const miniAppEnabled = (env) => env.TELEGRAM_MINI_APP === "1" || !!env.TELEGRAM_APP_NAME;
-
 let botUser = null;
 async function botUsername(env) {
   if (env.TELEGRAM_BOT_USERNAME) return env.TELEGRAM_BOT_USERNAME;
@@ -118,33 +96,36 @@ async function botUsername(env) {
   return botUser;
 }
 
-/* start_param дозволяє лише [A-Za-z0-9_-]: id заявки + імʼя клієнта в base64url (для заголовка в застосунку). */
+/* «⏰ Нагадати» відкриває міні-застосунок «Дата й час» (public/tg-remind.html).
+   start_param дозволяє лише [A-Za-z0-9_-]: id заявки + імʼя клієнта в base64url (для заголовка).
+   WEBAPP_URL — прямий HTTPS URL до сторінки міні-застосунку (напр. https://my-app.vercel.app/tg-remind.html).
+   web_app-кнопка відкриває застосунок без підтвердження; t.me-посилання — fallback якщо URL не задано. */
 const b64url = (s) => Buffer.from(s, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-async function miniAppUrl(env, leadId, client) {
-  const param = `${leadId}_${b64url(client.slice(0, 40))}`.slice(0, 500);
+const startParam = (leadId, client) => `${leadId}_${b64url(client.slice(0, 40))}`.slice(0, 500);
+
+async function miniAppUrls(env, leadId, client) {
+  const param = startParam(leadId, client);
   const bot = await botUsername(env);
-  return env.TELEGRAM_APP_NAME
-    ? `https://t.me/${bot}/${env.TELEGRAM_APP_NAME}?startapp=${param}`
-    : `https://t.me/${bot}?startapp=${param}`;
+  const textUrl = env.TELEGRAM_APP_NAME
+    ? `t.me/${bot}/${env.TELEGRAM_APP_NAME}?startapp=${param}`
+    : `t.me/${bot}?startapp=${param}`;
+  const webAppUrl = env.WEBAPP_URL ? `${env.WEBAPP_URL.replace(/\/$/, "")}?startapp=${param}` : null;
+  return { textUrl, webAppUrl };
 }
 
-async function laterKeyboard(env, leadId, client) {
-  const opts = env.TG_DEV === "1" ? [LATER_DEV, ...LATER] : LATER;
-  const btn = (id) => {
-    const o = opts.find((x) => x.id === id);
-    return { text: o.label, callback_data: `lt:${o.id}` };
-  };
-  const pickRow = miniAppEnabled(env)
-    ? [{ text: "📅 Дата й час", url: await miniAppUrl(env, leadId, client) }, { text: "✏️ Написати", callback_data: "lc" }]
-    : [{ text: "✏️ Написати свій термін", callback_data: "lc" }];
-  return {
-    inline_keyboard: [
-      [...(env.TG_DEV === "1" ? ["1m"] : []), "30m", "1h", "3h"].map(btn),
-      ["tm", "1w"].map(btn),
-      pickRow,
-      [btn("no"), { text: "← Назад", callback_data: "bk" }],
-    ],
-  };
+/** Кнопки під заявкою. webAppUrl — якщо задано, додає кнопку «⏰ Нагадати» (web_app, без підтвердження). */
+export function leadKeyboard(current, webAppUrl) {
+  const rows = LAYOUT.map((row) =>
+    row.map((key) => {
+      const s = STATUSES[key];
+      return { text: `${key === current ? "✔︎ " : ""}${s.emoji} ${s.label}`, callback_data: `st:${key}` };
+    })
+  );
+  if (webAppUrl) {
+    rows.push([{ text: "⏰ Нагадати", web_app: { url: webAppUrl } }]);
+  }
+  rows.push([{ text: "📝 Нотатка", callback_data: "nt" }]);
+  return { inline_keyboard: rows };
 }
 
 const cancelKeyboard = { inline_keyboard: [[{ text: "✖️ Скасувати", callback_data: "nc" }]] };
@@ -164,6 +145,7 @@ function render(m) {
     const tags = [`#${s.tag}`, `#${GROUPS[s.group].tag}`, notes.length && "#нотатки"].filter(Boolean).join(" ");
     const remind = m.status === "later" && m.remind ? ` · 🔔 ${m.remind}` : "";
     const st = [`${STATUS_MARK}<b>Статус:</b> ${s.emoji} ${s.label}${remind}`, tags];
+    if (m.app) st.push(`${APP_MARK}${m.app}`);
     if (history.length) st.push("<i>Історія:</i>", ...history);
     blocks.push(st.join("\n"));
     return blocks.join("\n\n");
@@ -206,6 +188,7 @@ function parse(message) {
       const tags = (lines[1] || "").split(" ");
       m.status = Object.keys(STATUSES).find((k) => tags.includes(`#${STATUSES[k].tag}`)) || "new";
       m.remind = lines[0].split(" · 🔔 ")[1] || null;
+      m.app = (lines.find((l) => l.startsWith(APP_MARK)) || "").slice(APP_MARK.length) || null;
       m.history = lines.filter((l) => l.startsWith("• "));
     } else if (b.startsWith(NOTES_MARK)) {
       m.notes = b.split("\n").slice(1);
@@ -239,15 +222,24 @@ export function leadMessage(lead) {
   return render({ status: "new", body, notes: [], history: [], remind: null });
 }
 
-const editLead = (env, chat, id, m) =>
-  call(env, "editMessageText", {
+async function editLead(env, chat, id, m) {
+  const { textUrl, webAppUrl } = await miniAppUrls(env, id, clientName(m));
+  // Якщо є web_app-кнопка — не потрібне посилання в тексті; залишаємо для fallback.
+  m.app = webAppUrl ? null : esc(textUrl);
+  return call(env, "editMessageText", {
     chat_id: chat,
     message_id: id,
     text: render(m),
     parse_mode: "HTML",
     disable_web_page_preview: true,
-    reply_markup: keyboard(m.status),
+    reply_markup: leadKeyboard(m.status, webAppUrl),
   });
+}
+
+/** Після надсилання нової заявки: дописати посилання на застосунок (воно містить id повідомлення). */
+export async function finishLead(env, sent) {
+  await editLead(env, sent.chat.id, sent.message_id, parse(sent));
+}
 
 /* ---------- закріплене повідомлення: фільтри + список нагадувань ---------- */
 
@@ -272,7 +264,7 @@ export function boardText(chat, entries = []) {
     [
       "<b>Як працювати із заявкою</b>",
       "• Статус — кнопки під заявкою",
-      "• «⏰ Пізніше» — оберіть, коли нагадати, або напишіть свій термін",
+      "• «⏰ Нагадати» — посилання в заявці: обрати день і час (або «Пізніше» без нагадування)",
       "• «📝 Нотатка» — бот попросить написати текст і додасть його в заявку",
     ].join("\n"),
   ].join("\n\n");
@@ -315,9 +307,13 @@ async function updateBoard(env, chat, change) {
 }
 
 const setReminder = (env, chat, id, at, name) =>
-  updateBoard(env, chat, (list) => [...list.filter((e) => e.id !== id), ...(at ? [{ id, at, name }] : [])]);
+  updateBoard(env, chat, (list) => {
+    const rest = list.filter((e) => e.id !== id);
+    if (at && rest.length >= BOARD_MAX) throw new Error("board-full");
+    return [...rest, ...(at ? [{ id, at, name }] : [])];
+  });
 
-/** Викликається з /api/cron (і з npm run tg:poll): надсилає нагадування, час яких настав. */
+/** Викликається з /api/cron (і з npm run tg:local): надсилає нагадування, час яких настав. */
 export async function runReminders(env, chat = env.TELEGRAM_CHAT_ID) {
   const board = await getBoard(env, chat);
   const due = board.entries.filter((e) => e.at <= Date.now() + 30 * 1000);
@@ -366,16 +362,12 @@ async function applyStatus(env, chat, id, m, status, remindAt, who) {
   return remindAt ? `🔔 Нагадаю ${when}` : `${s.emoji} ${s.label}`;
 }
 
-/** Запит у каналі «напишіть …» — наступне повідомлення адміна бот забере собі. */
-function askInChannel(env, chat, leadId, kind, who, client, error) {
+/** Запит у каналі «напишіть нотатку…» — наступне повідомлення адміна бот забере собі. */
+function askNote(env, chat, leadId, who, client) {
   const lead = `<a href="${msgLink(chat, leadId)}">${esc(client)}</a>`;
-  const text =
-    kind === "note"
-      ? `${NOTE_PROMPT}<b>${esc(who)}</b>, напишіть нотатку до заявки ${lead} наступним повідомленням.`
-      : `${TIME_PROMPT}<b>${esc(who)}</b>, коли нагадати про заявку ${lead}?\nНапишіть, наприклад: <code>2 тижні</code> · <code>25 днів</code> · <code>завтра о 15</code> · <code>у пʼятницю вранці</code> · <code>15 листопада</code> · <code>наступного тижня</code>`;
   return call(env, "sendMessage", {
     chat_id: chat,
-    text: error ? `${text}\n\n🤔 ${error}` : text,
+    text: `${NOTE_PROMPT}<b>${esc(who)}</b>, напишіть нотатку до заявки ${lead} наступним повідомленням.`,
     parse_mode: "HTML",
     disable_web_page_preview: true,
     reply_parameters: { message_id: leadId, allow_sending_without_reply: true },
@@ -400,23 +392,14 @@ async function onButton(cq, env) {
 
   const m = parse(msg);
   try {
-    if (cq.data === "nt" || cq.data === "lc") {
-      if (cq.data === "lc") await quiet(call(env, "editMessageReplyMarkup", { chat_id: chat, message_id: id, reply_markup: keyboard(m.status) }));
-      await askInChannel(env, chat, id, cq.data === "nt" ? "note" : "time", who, clientName(m));
-      return answer(cq.data === "nt" ? "Напишіть нотатку в канал" : "Напишіть термін у канал");
+    if (cq.data === "nt") {
+      await askNote(env, chat, id, who, clientName(m));
+      return answer("Напишіть нотатку в канал");
     }
-    if (cq.data === "bk") {
-      await call(env, "editMessageReplyMarkup", { chat_id: chat, message_id: id, reply_markup: keyboard(m.status) });
-      return answer();
-    }
-    if (cq.data === "st:later") {
-      await call(env, "editMessageReplyMarkup", { chat_id: chat, message_id: id, reply_markup: await laterKeyboard(env, id, clientName(m)) });
-      return answer("Коли нагадати?");
-    }
-    if (cq.data.startsWith("lt:")) {
-      const opt = [LATER_DEV, ...LATER].find((o) => o.id === cq.data.slice(3));
-      if (!opt) return answer();
-      return answer(await applyStatus(env, chat, id, m, "later", opt.at(), who));
+    // Старі кнопки (до оновлення) і заявка, якій ще не встигли поставити посилання на застосунок
+    if (cq.data === "st:later" || cq.data === "bk" || cq.data === "lc" || cq.data.startsWith("lt:")) {
+      await editLead(env, chat, id, m);
+      return answer("Тапніть посилання «⏰ Нагадати» в заявці — відкриється вибір дати й часу");
     }
     const status = cq.data.startsWith("st:") ? cq.data.slice(3) : null;
     if (!STATUSES[status]) return answer();
@@ -430,10 +413,25 @@ async function onButton(cq, env) {
 /** Виклик із міні-застосунку: { y, m, d, h, mi } за Києвом → статус «пізніше» з нагадуванням. */
 export async function setReminderFromApp(env, leadId, t, user, chat = env.TELEGRAM_CHAT_ID) {
   if (!(await isAdmin(env, chat, user.id))) return { ok: false, error: "Ставити нагадування можуть лише адміністратори каналу" };
+
+  // «Без нагадування» — просто статус «Пізніше»
+  if (t.none) {
+    const r = await readMessage(env, chat, leadId, "✅ Позначено «Пізніше»");
+    if (!r || !isLead(r.original)) return { ok: false, error: "Заявку не знайдено — можливо, її видалили" };
+    try {
+      await applyStatus(env, chat, leadId, parse(r.original), "later", null, fullName(user));
+    } finally {
+      await sleep(THANKS_DELAY);
+      await del(env, chat, r.probe.message_id);
+    }
+    return { ok: true };
+  }
+
   const nums = ["y", "m", "d", "h", "mi"].map((k) => Number(t[k]));
   if (nums.some((n) => !Number.isInteger(n))) return { ok: false, error: "Оберіть дату й час" };
   const at = kyivAt(...nums);
-  if (at < Date.now() + MIN) return { ok: false, error: "Цей час уже минув — оберіть пізніший" };
+  // Найраніше — наступна хвилина: о 00:12:40 можна поставити 00:13 («будильник» спрацьовує щохвилини)
+  if (at < Math.floor(Date.now() / MIN) * MIN + MIN) return { ok: false, error: "Цей час уже минув — оберіть пізніший" };
   if (at > Date.now() + 400 * 24 * HOUR) return { ok: false, error: "Задалеко — оберіть дату в межах року" };
 
   // «Дякую» одночасно читає заявку (відповідь на неї повертає її вміст).
@@ -441,6 +439,9 @@ export async function setReminderFromApp(env, leadId, t, user, chat = env.TELEGR
   if (!r || !isLead(r.original)) return { ok: false, error: "Заявку не знайдено — можливо, її видалили" };
   try {
     await applyStatus(env, chat, leadId, parse(r.original), "later", at, fullName(user));
+  } catch (e) {
+    if (e.message === "board-full") return { ok: false, error: `Заплановано вже ${BOARD_MAX} нагадувань — це максимум. Закрийте старі заявки.` };
+    throw e;
   } finally {
     // Підтвердження в каналі ненадовго — щоб було видно, що спрацювало.
     await sleep(THANKS_DELAY);
@@ -449,7 +450,7 @@ export async function setReminderFromApp(env, leadId, t, user, chat = env.TELEGR
   return { ok: true, when: fmtWhen(at) };
 }
 
-/* Повідомлення адміна в каналі: якщо перед ним висить запит бота — це відповідь на нього. */
+/* Повідомлення адміна в каналі: якщо перед ним висить запит «напишіть нотатку» — це нотатка. */
 async function onChannelPost(post, env) {
   const text = (post.text || post.caption || "").trim();
   if (!text || text.startsWith("/")) return;
@@ -462,7 +463,7 @@ async function onChannelPost(post, env) {
     if (!r) continue;
     await del(env, chat, r.probe.message_id);
     const p = r.original;
-    const ours = p?.text?.startsWith(NOTE_PROMPT) || p?.text?.startsWith(TIME_PROMPT);
+    const ours = p?.text?.startsWith(NOTE_PROMPT);
     if (ours && post.date - p.date <= PROMPT_TTL) prompt = p;
   }
   if (!prompt) return;
@@ -473,37 +474,18 @@ async function onChannelPost(post, env) {
   const leadId = link && +link.url.match(LINK_RE)[1];
   if (!leadId) return;
   const who = bold ? prompt.text.slice(bold.offset, bold.offset + bold.length) : "Адмін";
-  const kind = prompt.text.startsWith(NOTE_PROMPT) ? "note" : "time";
-
-  // Термін не розпізнано — перепитуємо новим запитом (щоб він знову був останнім у каналі).
-  let at = null;
-  if (kind === "time") {
-    at = parseWhen(text);
-    if (!at) {
-      await del(env, chat, post.message_id);
-      await del(env, chat, prompt.message_id);
-      const client = prompt.text.slice(link.offset, link.offset + link.length);
-      await askInChannel(env, chat, leadId, "time", who, client, `Не зрозумів «${esc(text.slice(0, 40))}» або цей час уже минув. Спробуйте ще раз.`);
-      return;
-    }
-  }
 
   // «Дякую» одночасно читає заявку (відповідь на неї повертає її вміст).
-  const thanks = kind === "note" ? "✅ Дякую, нотатку додано" : `✅ Дякую, нагадаю ${fmtWhen(at)}`;
-  const r = await readMessage(env, chat, leadId, thanks);
+  const r = await readMessage(env, chat, leadId, "✅ Дякую, нотатку додано");
   if (!r || !isLead(r.original)) return;
 
   const m = parse(r.original);
+  m.notes.push(`— ${stamp()} · ${esc(who)}: ${esc(text.replace(/\s*\n+\s*/g, " ").slice(0, 600))}`);
   try {
-    if (kind === "note") {
-      m.notes.push(`— ${stamp()} · ${esc(who)}: ${esc(text.replace(/\s*\n+\s*/g, " ").slice(0, 600))}`);
-      await editLead(env, chat, leadId, m);
-    } else {
-      await applyStatus(env, chat, leadId, m, "later", at, who);
-    }
+    await editLead(env, chat, leadId, m);
   } catch (e) {
-    console.error("[tg] reply failed:", e.message);
-    await quiet(call(env, "editMessageText", { chat_id: chat, message_id: r.probe.message_id, text: "⚠️ Не вдалося оновити заявку" }));
+    console.error("[tg] note failed:", e.message);
+    await quiet(call(env, "editMessageText", { chat_id: chat, message_id: r.probe.message_id, text: "⚠️ Не вдалося додати нотатку" }));
   }
 
   // Прибираємо діалог: запит і ваше повідомлення — одразу, «Дякую» — за мить.

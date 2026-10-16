@@ -4,7 +4,7 @@
    dev-сервера (vite.config.js).
    ============================================================ */
 
-import { tg, leadMessage, keyboard } from "./_telegram.js";
+import { tg, leadMessage, leadKeyboard, finishLead } from "./_telegram.js";
 import { validateLead } from "./_validate.js";
 
 export { validateLead };
@@ -25,13 +25,16 @@ export async function handleLead(body, env) {
   if (lead.website) return { status: 200, body: { ok: true } };
 
   try {
-    await tg(token, "sendMessage", {
+    const sent = await tg(token, "sendMessage", {
       chat_id: chatId,
       text: leadMessage(lead),
       parse_mode: "HTML",
       disable_web_page_preview: true,
-      reply_markup: keyboard("new"),
+      reply_markup: leadKeyboard("new"),
     });
+    // Посилання «⏰ Нагадати» містить id цієї заявки — дописуємо його, коли id вже відомий.
+    // Не вдалося — не страшно: посилання зʼявиться при першій зміні статусу.
+    await finishLead(env, sent).catch((e) => console.error("[lead] link:", e.message));
     return { status: 200, body: { ok: true } };
   } catch (e) {
     console.error("[lead] Telegram error:", e.message);

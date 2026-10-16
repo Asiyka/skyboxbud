@@ -15,94 +15,123 @@
     --hint: var(--tg-theme-hint-color, #8a857c);
     --accent: #c8693a;
     --accent-text: #ffffff;
-    --line: color-mix(in srgb, var(--hint) 22%, transparent);
-    --row: 44px;
+    --row: 40px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  body { padding: 16px 16px 24px; user-select: none; }
-  .wrap { max-width: 420px; margin: 0 auto; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 12px 14px 14px; user-select: none; overflow: hidden; }
+  .wrap { max-width: 380px; margin: 0 auto; }
 
-  h1 { font-size: 20px; margin: 4px 0 2px; letter-spacing: -0.01em; }
-  .sub { color: var(--hint); font-size: 14px; margin-bottom: 14px; }
+  .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; min-height: 28px; }
+  h1 { font-size: 17px; margin: 0; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .step { font-size: 12px; color: var(--hint); white-space: nowrap; }
 
-  .chips { display: flex; gap: 8px; margin-bottom: 14px; overflow-x: auto; scrollbar-width: none; }
-  .chip { flex: 0 0 auto; border: 0; border-radius: 999px; padding: 8px 14px; background: var(--bg2); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
-  .chip:active { transform: scale(0.97); }
+  /* Слайдер швидких виборів: гортається пальцем/мишкою, краї гаснуть — видно, що є ще */
+  .chips { display: flex; gap: 6px; margin: 0 -14px 10px; padding: 0 14px; overflow-x: auto; scrollbar-width: none;
+    scroll-snap-type: x proximity; scroll-padding: 0 14px; cursor: grab;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--fl, 0px), #000 calc(100% - var(--fr, 0px)), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 var(--fl, 0px), #000 calc(100% - var(--fr, 0px)), transparent 100%); }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips.dragging { cursor: grabbing; scroll-snap-type: none; }
+  .chip { flex: 0 0 auto; scroll-snap-align: start; border: 0; border-radius: 999px; padding: 7px 12px; background: var(--bg2); color: var(--text); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+  .chip:active { transform: scale(0.96); }
+  /* Бежева кнопка «без нагадування» — помітна, але не сперечається з основною */
+  .soft { display: block; width: 100%; margin-top: 10px; padding: 12px; border: 0; border-radius: 12px; background: var(--bg2); color: var(--text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .soft:active { transform: scale(0.99); filter: brightness(0.97); }
 
-  .card { background: var(--bg2); border-radius: 18px; padding: 12px; margin-bottom: 14px; }
-  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-  .cal-title { font-weight: 600; text-transform: capitalize; }
-  .nav { width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: var(--text); font-size: 20px; cursor: pointer; }
-  .nav:disabled { opacity: 0.25; }
+  .card { background: var(--bg2); border-radius: 16px; padding: 10px; }
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+  .cal-title { font-weight: 600; font-size: 15px; text-transform: capitalize; }
+  .nav { width: 34px; height: 34px; border: 0; border-radius: 50%; background: transparent; color: var(--text); font-size: 20px; cursor: pointer; }
+  .nav:disabled { opacity: 0.2; }
   .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
-  .wd { font-size: 12px; color: var(--hint); padding: 4px 0; }
-  .day { aspect-ratio: 1; max-height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--text); font: inherit; font-size: 15px; cursor: pointer; }
-  .day:disabled { color: var(--hint); opacity: 0.4; cursor: default; }
+  .wd { font-size: 11px; color: var(--hint); padding: 2px 0 4px; }
+  .day { height: 36px; border: 0; border-radius: 10px; background: transparent; color: var(--text); font: inherit; font-size: 15px; cursor: pointer; }
+  .day:disabled { color: var(--hint); opacity: 0.35; cursor: default; }
   .day.today { box-shadow: inset 0 0 0 1.5px var(--accent); }
   .day.sel { background: var(--accent); color: var(--accent-text); font-weight: 600; }
 
-  /* Колесо часу: прокрутка з прилипанням, центральний рядок — обраний */
-  .time { position: relative; display: flex; justify-content: center; align-items: center; gap: 4px; height: calc(var(--row) * 5); overflow: hidden; }
-  .time::before { content: ""; position: absolute; left: 12px; right: 12px; top: 50%; height: var(--row); transform: translateY(-50%); border-radius: 12px; background: var(--bg); pointer-events: none; }
-  .time::after { content: ""; position: absolute; inset: 0; pointer-events: none;
-    background: linear-gradient(var(--bg2), transparent 38%, transparent 62%, var(--bg2)); }
-  .wheel { position: relative; width: 84px; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; overscroll-behavior: contain; }
+  /* Крок 2: час */
+  .date-pill { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--bg2); border-radius: 14px; padding: 10px 12px; margin-bottom: 10px; }
+  .date-pill b { font-size: 15px; }
+  .link { border: 0; background: none; color: var(--accent); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; padding: 0; }
+  .time { position: relative; display: flex; justify-content: center; align-items: center; gap: 2px; height: calc(var(--row) * 5); overflow: hidden; }
+  .time::before { content: ""; position: absolute; left: 22%; right: 22%; top: 50%; height: var(--row); transform: translateY(-50%); border-radius: 12px; background: var(--bg); pointer-events: none; }
+  .time::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(var(--bg2), transparent 36%, transparent 64%, var(--bg2)); }
+  .wheel { position: relative; width: 70px; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; overscroll-behavior: contain; }
   .wheel::-webkit-scrollbar { display: none; }
-  .wheel div { height: var(--row); line-height: var(--row); text-align: center; font-size: 24px; font-variant-numeric: tabular-nums; scroll-snap-align: center; color: var(--hint); transition: color 120ms, transform 120ms; }
+  .wheel div { height: var(--row); line-height: var(--row); text-align: center; font-size: 24px; font-variant-numeric: tabular-nums; scroll-snap-align: center; color: var(--hint); transition: color 120ms; }
   .wheel div.on { color: var(--text); font-weight: 600; }
   .wheel .pad { scroll-snap-align: none; }
   .colon { position: relative; z-index: 1; font-size: 24px; font-weight: 600; }
+  /* Швидкий час — один рівний ряд із 6 кнопок */
+  .quick { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-top: 10px; }
+  .quick .chip { text-align: center; padding: 8px 0; font-size: 13px; font-variant-numeric: tabular-nums; }
 
-  .summary { text-align: center; font-size: 15px; color: var(--hint); min-height: 22px; }
-  .summary b { color: var(--text); }
+  .hint { text-align: center; font-size: 12px; color: var(--hint); margin-top: 8px; }
+  .hint:empty { display: none; }
   .warn { color: #d14b3c; }
+  [hidden] { display: none !important; }
 
   /* Кнопка для перегляду поза Telegram (у Telegram — рідна кнопка внизу) */
-  .fallback { display: none; width: 100%; margin-top: 14px; padding: 14px; border: 0; border-radius: 14px; background: var(--accent); color: var(--accent-text); font: inherit; font-weight: 600; }
+  .fallback { display: none; width: 100%; margin-top: 10px; padding: 12px; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-text); font: inherit; font-weight: 600; }
   .fallback:disabled { opacity: 0.5; }
-  .notice { display: none; margin-top: 10px; font-size: 13px; color: var(--hint); text-align: center; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1 id="title">Нагадати передзвонити</h1>
-  <div class="sub" id="sub">Оберіть день і час — бот нагадає в каналі.</div>
-
-  <div class="chips" id="chips"></div>
-
-  <div class="card">
-    <div class="cal-head">
-      <button class="nav" id="prev" aria-label="Попередній місяць">‹</button>
-      <div class="cal-title" id="month"></div>
-      <button class="nav" id="next" aria-label="Наступний місяць">›</button>
-    </div>
-    <div class="grid" id="grid"></div>
+  <div class="top">
+    <h1 id="title">Нагадати</h1>
+    <span class="step" id="step">Крок 1 з 2 · день</span>
   </div>
 
-  <div class="card">
-    <div class="time">
-      <div class="wheel" id="hours"></div>
-      <div class="colon">:</div>
-      <div class="wheel" id="minutes"></div>
+  <!-- Крок 1: день -->
+  <section id="s1">
+    <div class="chips" id="dayChips"></div>
+    <div class="card">
+      <div class="cal-head">
+        <button class="nav" id="prev" aria-label="Попередній місяць">‹</button>
+        <div class="cal-title" id="month"></div>
+        <button class="nav" id="next" aria-label="Наступний місяць">›</button>
+      </div>
+      <div class="grid" id="grid"></div>
     </div>
-  </div>
+    <button class="soft" id="noRemind">Позначити «Пізніше» без нагадування</button>
+  </section>
 
-  <div class="summary" id="summary"></div>
-  <button class="fallback" id="fallback">Нагадати</button>
-  <div class="notice" id="notice">Це перегляд у браузері. Ставити нагадування можна лише з кнопки «📅 Дата й час» під заявкою в Telegram.</div>
+  <!-- Крок 2: час -->
+  <section id="s2" hidden>
+    <div class="date-pill">
+      <b id="dateLabel"></b>
+      <button class="link" id="back">‹ змінити</button>
+    </div>
+    <div class="card">
+      <div class="time">
+        <div class="wheel" id="hours"></div>
+        <div class="colon">:</div>
+        <div class="wheel" id="minutes"></div>
+      </div>
+    </div>
+    <div class="quick" id="timeChips"></div>
+  </section>
+
+  <div class="hint" id="hint"></div>
+  <button class="fallback" id="fallback"></button>
 </div>
 
 <script>
 (() => {
   const tg = window.Telegram && window.Telegram.WebApp;
   const inTelegram = !!(tg && tg.initData);
-  if (tg) { tg.ready(); tg.expand(); }
+  // Без tg.expand(): застосунок відкривається компактною шторкою
+  if (tg) tg.ready();
 
   /* ---------- час за Києвом (сервер теж рахує за Києвом) ---------- */
+  // Найраніше — наступна хвилина (о 00:12 можна поставити 00:13): «будильник» сайту спрацьовує щохвилини
+  const MIN_AHEAD = 1;
   const kyivNow = () => {
     const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
-      .formatToParts(new Date()).map((x) => [x.type, +x.value || x.value]));
+      .formatToParts(new Date()).map((x) => [x.type, x.value]));
     return { y: +p.year, m: +p.month, d: +p.day, h: +p.hour, mi: +p.minute };
   };
   const key = (y, m, d) => y * 10000 + m * 100 + d;
@@ -113,41 +142,39 @@
   const WD_SHORT = ["нд", "пн", "вт", "ср", "чт", "пт", "сб"];
   const z = (n) => String(n).padStart(2, "0");
   const weekday = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  const haptic = () => { try { tg && tg.HapticFeedback && tg.HapticFeedback.selectionChanged(); } catch (e) {} };
 
   /* ---------- імʼя клієнта з посилання (id_імʼя-в-base64url) ---------- */
   const startParam = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || new URLSearchParams(location.search).get("startapp") || "";
-  const [, nameB64] = startParam.split("_");
+  const nameB64 = startParam.split("_")[1];
   if (nameB64) {
     try {
       const bin = atob(nameB64.replace(/-/g, "+").replace(/_/g, "/"));
-      const name = new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
-      document.getElementById("title").textContent = `Нагадати: ${name}`;
+      document.getElementById("title").textContent = `Нагадати: ${new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)))}`;
     } catch (e) {}
   }
 
-  /* ---------- стан: обраний день і час ---------- */
+  /* ---------- стан ---------- */
   const now = kyivNow();
   const today = { y: now.y, m: now.m, d: now.d };
-  // За замовчуванням — через годину (округлено до 5 хв); якщо це вже вечір/ніч — завтра о 10:00
-  let defMin = Math.ceil((now.h * 60 + now.mi + 60) / 5) * 5;
-  let sel = { ...today };
-  if (defMin > 20 * 60) {
-    sel = addDays(today.y, today.m, today.d, 1);
-    defMin = 10 * 60;
-  } else if (defMin < 8 * 60) defMin = 10 * 60;
-  let hour = Math.floor(defMin / 60);
-  let minute = defMin % 60;
-  let view = { y: sel.y, m: sel.m };
-  const maxView = { y: today.y + 1, m: today.m };
+  let sel = null; // обраний день
+  let hour = 10;
+  let minute = 0;
+  let view = { y: today.y, m: today.m };
+  const maxYm = (today.y + 1) * 12 + today.m;
 
-  /* ---------- календар ---------- */
-  const grid = document.getElementById("grid");
+  const $ = (id) => document.getElementById(id);
+  const hint = $("hint");
+  const fallback = $("fallback");
+
+  /* ---------- крок 1: календар ---------- */
   function renderCalendar() {
-    document.getElementById("month").textContent = `${MONTHS_NOM[view.m - 1]} ${view.y}`;
-    document.getElementById("prev").disabled = view.y * 12 + view.m <= today.y * 12 + today.m;
-    document.getElementById("next").disabled = view.y * 12 + view.m >= maxView.y * 12 + maxView.m;
-    grid.innerHTML = "";
-    ["пн", "вт", "ср", "чт", "пт", "сб", "нд"].forEach((w) => grid.insertAdjacentHTML("beforeend", `<div class="wd">${w}</div>`));
+    $("month").textContent = `${MONTHS_NOM[view.m - 1]} ${view.y}`;
+    const ym = view.y * 12 + view.m;
+    $("prev").disabled = ym <= today.y * 12 + today.m;
+    $("next").disabled = ym >= maxYm;
+    const grid = $("grid");
+    grid.innerHTML = ["пн", "вт", "ср", "чт", "пт", "сб", "нд"].map((w) => `<div class="wd">${w}</div>`).join("");
     const lead = (weekday(view.y, view.m, 1) + 6) % 7;
     const days = new Date(Date.UTC(view.y, view.m, 0)).getUTCDate();
     for (let i = 0; i < lead; i++) grid.insertAdjacentHTML("beforeend", "<div></div>");
@@ -158,92 +185,131 @@
       const k = key(view.y, view.m, d);
       b.disabled = k < key(today.y, today.m, today.d);
       if (k === key(today.y, today.m, today.d)) b.classList.add("today");
-      if (k === key(sel.y, sel.m, sel.d)) b.classList.add("sel");
-      b.onclick = () => { sel = { y: view.y, m: view.m, d }; haptic(); renderCalendar(); update(); };
+      if (sel && k === key(sel.y, sel.m, sel.d)) b.classList.add("sel");
+      b.onclick = () => pickDay({ y: view.y, m: view.m, d });
       grid.appendChild(b);
     }
   }
-  document.getElementById("prev").onclick = () => { view = view.m === 1 ? { y: view.y - 1, m: 12 } : { y: view.y, m: view.m - 1 }; renderCalendar(); };
-  document.getElementById("next").onclick = () => { view = view.m === 12 ? { y: view.y + 1, m: 1 } : { y: view.y, m: view.m + 1 }; renderCalendar(); };
+  $("prev").onclick = () => { view = view.m === 1 ? { y: view.y - 1, m: 12 } : { y: view.y, m: view.m - 1 }; renderCalendar(); };
+  $("next").onclick = () => { view = view.m === 12 ? { y: view.y + 1, m: 1 } : { y: view.y, m: view.m + 1 }; renderCalendar(); };
 
-  /* ---------- швидкі варіанти ---------- */
-  const chips = [
-    ["Сьогодні", () => today],
-    ["Завтра", () => addDays(today.y, today.m, today.d, 1)],
-    ["Через 3 дні", () => addDays(today.y, today.m, today.d, 3)],
-    ["Через тиждень", () => addDays(today.y, today.m, today.d, 7)],
-    ["Через 2 тижні", () => addDays(today.y, today.m, today.d, 14)],
-    ["Через місяць", () => addDays(today.y, today.m, today.d, 30)],
+  const dayChips = [
+    ["Сьогодні", 0], ["Завтра", 1], ["Через 3 дні", 3], ["Через тиждень", 7], ["Через 2 тижні", 14], ["Через місяць", 30],
   ];
-  const chipsEl = document.getElementById("chips");
-  chips.forEach(([label, fn]) => {
+  dayChips.forEach(([label, n]) => {
     const b = document.createElement("button");
     b.className = "chip";
     b.textContent = label;
-    b.onclick = () => { sel = fn(); view = { y: sel.y, m: sel.m }; haptic(); renderCalendar(); update(); };
-    chipsEl.appendChild(b);
+    b.onclick = () => pickDay(addDays(today.y, today.m, today.d, n));
+    $("dayChips").appendChild(b);
   });
 
-  /* ---------- колесо годин і хвилин ---------- */
-  const ROW = 44;
-  function makeWheel(el, count, value, onChange) {
+  /* ---------- крок 2: час ---------- */
+  const ROW = 40;
+  const wheels = {};
+  function makeWheel(id, count, get, set) {
+    const el = $(id);
     el.innerHTML = '<div class="pad"></div><div class="pad"></div>' +
       Array.from({ length: count }, (_, i) => `<div>${z(i)}</div>`).join("") +
       '<div class="pad"></div><div class="pad"></div>';
     const items = [...el.querySelectorAll("div:not(.pad)")];
-    let current = value;
-    const mark = () => items.forEach((it, i) => it.classList.toggle("on", i === current));
-    el.scrollTop = value * ROW;
-    mark();
+    let current = -1;
+    const mark = (i) => { current = i; items.forEach((it, j) => it.classList.toggle("on", j === i)); };
     let t;
     el.addEventListener("scroll", () => {
       const i = Math.max(0, Math.min(count - 1, Math.round(el.scrollTop / ROW)));
-      if (i !== current) { current = i; mark(); haptic(); onChange(i); }
+      if (i !== current) { mark(i); haptic(); set(i); update(); }
       clearTimeout(t);
-      t = setTimeout(() => { el.scrollTo({ top: current * ROW, behavior: "smooth" }); }, 120);
+      t = setTimeout(() => el.scrollTo({ top: current * ROW, behavior: "smooth" }), 120);
     }, { passive: true });
-    // Тап по значенню — прокрутити до нього
     items.forEach((it, i) => it.addEventListener("click", () => el.scrollTo({ top: i * ROW, behavior: "smooth" })));
+    wheels[id] = { to: (v, smooth) => { mark(v); el.scrollTo({ top: v * ROW, behavior: smooth ? "smooth" : "auto" }); } };
   }
-  makeWheel(document.getElementById("hours"), 24, hour, (v) => { hour = v; update(); });
-  makeWheel(document.getElementById("minutes"), 60, minute, (v) => { minute = v; update(); });
+  makeWheel("hours", 24, () => hour, (v) => (hour = v));
+  makeWheel("minutes", 60, () => minute, (v) => (minute = v));
+  const setTime = (h, mi, smooth) => { hour = h; minute = mi; wheels.hours.to(h, smooth); wheels.minutes.to(mi, smooth); update(); };
+
+  [["09:00", 9, 0], ["10:00", 10, 0], ["12:00", 12, 0], ["14:00", 14, 0], ["16:00", 16, 0], ["18:00", 18, 0]].forEach(([label, h, mi]) => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.textContent = label;
+    b.onclick = () => { haptic(); setTime(h, mi, true); };
+    $("timeChips").appendChild(b);
+  });
+
+  /* ---------- перемикання кроків ---------- */
+  function pickDay(day) {
+    sel = day;
+    view = { y: day.y, m: day.m };
+    haptic();
+    renderCalendar();
+    // Час за замовчуванням: сьогодні — через годину (округлено до 5 хв), інший день — 10:00
+    if (key(day.y, day.m, day.d) === key(today.y, today.m, today.d)) {
+      const n = kyivNow();
+      const t = Math.min(Math.ceil((n.h * 60 + n.mi + 60) / 5) * 5, 23 * 60 + 55);
+      setTime(Math.floor(t / 60), t % 60, false);
+    } else setTime(10, 0, false);
+    showStep(2);
+  }
+
+  function showStep(n) {
+    $("s1").hidden = n !== 1;
+    $("s2").hidden = n !== 2;
+    $("step").textContent = n === 1 ? "Крок 1 з 2 · день" : "Крок 2 з 2 · час";
+    if (n === 2) {
+      const wd = weekday(sel.y, sel.m, sel.d);
+      $("dateLabel").textContent = `${WD[wd]}, ${sel.d} ${MONTHS[sel.m - 1]}`;
+      // Колеса виміряні лише коли видимі — виставляємо позицію після показу
+      requestAnimationFrame(() => setTime(hour, minute, false));
+      if (tg) { tg.BackButton.show(); }
+    } else if (tg) { tg.BackButton.hide(); }
+    update();
+  }
+  $("back").onclick = () => showStep(1);
+  if (tg) tg.BackButton.onClick(() => showStep(1));
 
   /* ---------- підсумок і кнопка ---------- */
-  const summary = document.getElementById("summary");
-  const fallback = document.getElementById("fallback");
-  const isPast = () => {
+  const tooSoon = () => {
+    if (!sel) return true;
     const n = kyivNow();
-    const a = key(sel.y, sel.m, sel.d) * 10000 + hour * 100 + minute;
-    const b = key(n.y, n.m, n.d) * 10000 + n.h * 100 + n.mi;
-    return a <= b;
+    const pick = Date.UTC(sel.y, sel.m - 1, sel.d, hour, minute);
+    const limit = Date.UTC(n.y, n.m - 1, n.d, n.h, n.mi + MIN_AHEAD);
+    return pick < limit;
   };
   function update() {
-    const wd = weekday(sel.y, sel.m, sel.d);
-    const past = isPast();
-    summary.innerHTML = past
-      ? '<span class="warn">Цей час уже минув — оберіть пізніший</span>'
-      : `<b>${WD[wd]}, ${sel.d} ${MONTHS[sel.m - 1]}</b> о <b>${z(hour)}:${z(minute)}</b>`;
-    const label = past ? "Оберіть пізніший час" : `Нагадати: ${WD_SHORT[wd]} ${z(sel.d)}.${z(sel.m)} о ${z(hour)}:${z(minute)}`;
+    const step2 = !!sel && !$("s2").hidden;
+    let label = "Оберіть день";
+    let active = false;
+    if (step2) {
+      const soon = tooSoon();
+      const n = kyivNow();
+      const earliest = (n.h * 60 + n.mi + MIN_AHEAD) % (24 * 60);
+      hint.innerHTML = soon ? `<span class="warn">Найраніше — о ${z(Math.floor(earliest / 60))}:${z(earliest % 60)}</span>` : "";
+      label = soon ? "Оберіть пізніший час" : `Нагадати: ${WD_SHORT[weekday(sel.y, sel.m, sel.d)]} ${z(sel.d)}.${z(sel.m)} о ${z(hour)}:${z(minute)}`;
+      active = !soon;
+    } else hint.textContent = "";
+
     if (inTelegram) {
-      tg.MainButton.setParams({ text: label, color: "#c8693a", text_color: "#ffffff", is_active: !past, is_visible: true });
+      tg.MainButton.setParams({ text: label, color: "#c8693a", text_color: "#ffffff", is_active: active, is_visible: step2 });
     } else {
+      // Перегляд у браузері: кнопка лише на кроці 2, як рідна кнопка Telegram
       fallback.textContent = label;
       fallback.disabled = true;
+      fallback.style.display = step2 ? "block" : "none";
     }
   }
 
-  function haptic() { try { tg && tg.HapticFeedback && tg.HapticFeedback.selectionChanged(); } catch (e) {} }
-
   let sending = false;
-  async function submit() {
-    if (sending || isPast()) return;
+  async function submit(none) {
+    if (sending || (!none && tooSoon())) return;
+    if (!inTelegram) return;
     sending = true;
     tg.MainButton.showProgress();
     try {
       const r = await fetch("/api/reminder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ initData: tg.initData, y: sel.y, m: sel.m, d: sel.d, h: hour, mi: minute }),
+        body: JSON.stringify(none ? { initData: tg.initData, none: true } : { initData: tg.initData, y: sel.y, m: sel.m, d: sel.d, h: hour, mi: minute }),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok || !data.ok) throw new Error(data.error || "Не вдалося поставити нагадування");
@@ -257,14 +323,39 @@
     }
   }
 
-  if (inTelegram) {
-    tg.MainButton.onClick(submit);
-  } else {
-    fallback.style.display = "block";
-    document.getElementById("notice").style.display = "block";
-  }
+  /* ---------- слайдери: перетягування мишкою (Telegram на компʼютері) і згасання країв ---------- */
+  document.querySelectorAll(".chips").forEach((row) => {
+    const edges = () => {
+      const max = row.scrollWidth - row.clientWidth;
+      row.style.setProperty("--fl", row.scrollLeft > 2 ? "28px" : "0px");
+      row.style.setProperty("--fr", row.scrollLeft < max - 2 ? "28px" : "0px");
+    };
+    row.addEventListener("scroll", edges, { passive: true });
+    new ResizeObserver(edges).observe(row);
+    let startX = 0, startLeft = 0, moved = false, down = false;
+    row.addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "mouse") return; // на телефоні гортає сам браузер
+      down = true; moved = false; startX = e.clientX; startLeft = row.scrollLeft;
+    });
+    window.addEventListener("pointermove", (e) => {
+      if (!down) return;
+      const dx = e.clientX - startX;
+      if (Math.abs(dx) > 4) { moved = true; row.classList.add("dragging"); }
+      row.scrollLeft = startLeft - dx;
+    });
+    window.addEventListener("pointerup", () => { down = false; row.classList.remove("dragging"); });
+    // Після перетягування не вважати це кліком по кнопці
+    row.addEventListener("click", (e) => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+  });
+
+  $("noRemind").onclick = () => {
+    if (!inTelegram) return;
+    tg.showConfirm("Позначити заявку «Пізніше» без нагадування?", (ok) => ok && submit(true));
+  };
+
+  if (inTelegram) tg.MainButton.onClick(() => submit(false));
   renderCalendar();
-  update();
+  showStep(1);
 })();
 </script>
 </body>

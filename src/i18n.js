@@ -75,6 +75,13 @@ export const T = {
       sub: "Ціни вказані від і залежать від об'єму партії та розміру. Точний розрахунок — за телефоном.",
       prev: "Попередній",
       next: "Наступний",
+      photosCount: (n) => `Фото · ${n}`,
+      morePhotos: "Більше фото",
+      gallery: "Галерея",
+      photo: "Фото",
+      prevPhoto: "Попереднє фото",
+      nextPhoto: "Наступне фото",
+      close: "Закрити",
       products: [
         {
           tab: "Малі ящики",
@@ -301,6 +308,13 @@ export const T = {
       sub: "Prices shown are starting prices and depend on batch size and dimensions. Call us for an exact quote.",
       prev: "Previous",
       next: "Next",
+      photosCount: (n) => `Photos · ${n}`,
+      morePhotos: "More photos",
+      gallery: "Gallery",
+      photo: "Photo",
+      prevPhoto: "Previous photo",
+      nextPhoto: "Next photo",
+      close: "Close",
       products: [
         {
           tab: "Small crates",

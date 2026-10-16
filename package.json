@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "fetch:images": "node scripts/fetch-images.mjs",
     "tg:webhook": "node scripts/telegram-webhook.mjs",
-    "tg:poll": "node scripts/telegram-poll.mjs"
+    "tg:local": "node scripts/telegram-poll.mjs https://skyboxbud.vercel.app",
+    "tg:prod": "node scripts/telegram-webhook.mjs https://skyboxbud.vercel.app"
   },
   "dependencies": {
     "react": "^18.3.1",

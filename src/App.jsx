@@ -58,6 +58,15 @@ const IMG = {
 };
 const PRODUCT_PHOTOS = [IMG.small, IMG.medium, IMG.large, IMG.custom];
 
+/* Галерея кожного формату (у тому ж порядку, що й каталог). Перше фото — обкладинка слайда.
+   TODO: замінити на реальні фото кожного формату — покласти в public/images/ і вписати сюди імена файлів без .jpg */
+const PRODUCT_GALLERIES = [
+  [IMG.small, IMG.warehouse, IMG.medium, IMG.custom, IMG.large],
+  [IMG.medium, IMG.warehouse, IMG.small, IMG.large, IMG.custom],
+  [IMG.large, IMG.warehouse, IMG.custom, IMG.medium, IMG.small],
+  [IMG.custom, IMG.warehouse, IMG.large, IMG.small, IMG.medium],
+];
+
 const src = (id) => `/images/${id}.jpg`;
 
 /* ---------- мова ---------- */
@@ -245,7 +254,7 @@ function Toast() {
 
 const STRIPES = "repeating-linear-gradient(115deg, oklch(0.915 0.014 82) 0 14px, oklch(0.945 0.012 82) 14px 28px)";
 
-function Photo({ id, alt, radius = 0, style }) {
+function Photo({ id, alt, radius = 0, style, fit = "cover" }) {
   const [loaded, setLoaded] = useState(false);
   return (
     <div style={{ position: "relative", overflow: "hidden", borderRadius: radius, background: STRIPES, ...style }}>
@@ -259,7 +268,7 @@ function Photo({ id, alt, radius = 0, style }) {
           inset: 0,
           width: "100%",
           height: "100%",
-          objectFit: "cover",
+          objectFit: fit,
           display: "block",
           opacity: loaded ? 1 : 0,
           transition: "opacity 700ms ease",
@@ -383,6 +392,10 @@ section[id] { scroll-margin-top: 84px; }
 .h-faq:hover .faq-icon { background: oklch(0.93 0.01 85); }
 .h-msg { transition: background 200ms ease, border-color 200ms ease, transform 200ms ease; }
 .h-msg:hover { background: oklch(1 0 0 / 0.14) !important; border-color: var(--brand) !important; color: ${C.onDark} !important; transform: translateY(-1px); }
+.h-lift { transition: transform 200ms ease; }
+.h-lift:hover { transform: translateY(-1px); }
+.h-gal-close { transition: background 200ms ease; }
+.h-gal-close:hover { background: oklch(1 0 0 / 0.18) !important; }
 .h-foot-msg { transition: transform 200ms ease, box-shadow 200ms ease; }
 .h-foot-msg:hover { transform: translateY(-2px); box-shadow: 0 6px 14px oklch(0.2 0.01 80 / 0.1); }
 
@@ -1041,11 +1054,176 @@ function CatalogTabs({ idx, go, products }) {
   );
 }
 
+/* Галерея фото формату: фото фіксованого розміру по центру (не на весь екран), мініатюри — завжди по центру знизу. */
+function Gallery({ title, photos, alt, start, onClose, isMobile }) {
+  const { t } = useT();
+  const c = t.catalog;
+  const [i, setI] = useState(start);
+  const n = photos.length;
+  const step = useCallback((d) => setI((v) => (v + d + n) % n), [n]);
+  const touchX = useRef(null);
+  const thumbsRef = useRef(null);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") step(-1);
+      else if (e.key === "ArrowRight") step(1);
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose, step]);
+
+  // Активна мініатюра — завжди у видимій зоні
+  useEffect(() => {
+    thumbsRef.current?.children[i]?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  }, [i]);
+
+  const stop = (e) => e.stopPropagation();
+  const navBtn = (dir) => (
+    <button
+      onClick={(e) => {
+        stop(e);
+        step(dir);
+      }}
+      aria-label={dir < 0 ? c.prevPhoto : c.nextPhoto}
+      className="h-white"
+      style={{
+        position: "absolute",
+        top: "50%",
+        [dir < 0 ? "left" : "right"]: isMobile ? 10 : 16,
+        transform: "translateY(-50%)",
+        width: isMobile ? 40 : 48,
+        height: isMobile ? 40 : 48,
+        borderRadius: 14,
+        border: "none",
+        background: "oklch(1 0 0 / 0.95)",
+        color: C.ink,
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 2,
+      }}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
+        <path d={dir < 0 ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6"} />
+      </svg>
+    </button>
+  );
+
+  // Фіксована рамка: однакова для всіх фото, вписується в екран і не розтягується на весь
+  const frameW = isMobile ? "calc(100vw - 32px)" : "min(880px, calc(100vw - 80px))";
+  const frameH = isMobile ? "min(56vh, 420px)" : "min(62vh, 560px)";
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${c.gallery}: ${title}`}
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 200,
+        background: "oklch(0.16 0.01 80 / 0.94)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: isMobile ? 16 : "28px 40px",
+      }}
+    >
+      <div onClick={stop} style={{ width: frameW, display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, color: "oklch(0.97 0.006 85)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+            <span style={{ fontFamily: DISPLAY, fontSize: 12, fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: "oklch(0.75 0.11 45)" }}>{c.gallery}</span>
+            <span style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+            <span style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, color: "oklch(0.8 0.01 80)" }}>
+              {i + 1} / {n}
+            </span>
+            <button
+              onClick={onClose}
+              aria-label={c.close}
+              className="h-gal-close"
+              style={{ width: 44, height: 44, borderRadius: 12, border: "none", background: "oklch(1 0 0 / 0.1)", color: "oklch(0.97 0.006 85)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ display: "block" }}>
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div
+          onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
+          onTouchEnd={(e) => {
+            if (touchX.current == null) return;
+            const dx = e.changedTouches[0].clientX - touchX.current;
+            if (Math.abs(dx) > 45) step(dx < 0 ? 1 : -1);
+            touchX.current = null;
+          }}
+          style={{
+            position: "relative",
+            height: frameH,
+            borderRadius: 20,
+            overflow: "hidden",
+          }}
+        >
+          {/* key — щоб кожне фото плавно проявлялось, а не «перестрибувало» */}
+          <Photo key={photos[i]} id={photos[i]} alt={`${alt} — ${i + 1}`} fit="contain" style={{ position: "absolute", inset: 0, background: "transparent" }} />
+          {n > 1 && navBtn(-1)}
+          {n > 1 && navBtn(1)}
+        </div>
+
+        {/* Мініатюри: ряд завжди по центру; якщо не вміщаються — гортаються */}
+        <div className="noscroll" style={{ overflowX: "auto", display: "flex", padding: 2 }}>
+          <div ref={thumbsRef} style={{ display: "flex", gap: 10, margin: "0 auto", flexShrink: 0 }}>
+            {photos.map((id, k) => (
+              <button
+                key={k}
+                onClick={() => setI(k)}
+                aria-label={`${c.photo} ${k + 1}`}
+                aria-current={k === i}
+                style={{
+                  flex: "0 0 auto",
+                  width: isMobile ? 64 : 96,
+                  height: isMobile ? 48 : 64,
+                  borderRadius: 12,
+                  border: `2px solid ${k === i ? "oklch(0.75 0.11 45)" : "transparent"}`,
+                  opacity: k === i ? 1 : 0.55,
+                  padding: 0,
+                  cursor: "pointer",
+                  overflow: "hidden",
+                  background: "oklch(0.3 0.012 80)",
+                  transition: "opacity 200ms ease, border-color 200ms ease",
+                }}
+              >
+                <img src={src(id)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Catalog({ isMobile }) {
   const { t } = useT();
   const c = t.catalog;
   const products = c.products;
   const [idx, setIdx] = useState(0);
+  const [gallery, setGallery] = useState(false);
+  const closeGallery = useCallback(() => setGallery(false), []);
   const touchX = useRef(null);
   const n = products.length;
   const go = useCallback((next) => setIdx(((next % n) + n) % n), [n]);
@@ -1053,13 +1231,13 @@ function Catalog({ isMobile }) {
   useEffect(() => {
     const onKey = (e) => {
       const tag = document.activeElement?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (gallery || tag === "INPUT" || tag === "TEXTAREA") return; // у галереї стрілки гортають фото
       if (e.key === "ArrowRight") go(idx + 1);
       if (e.key === "ArrowLeft") go(idx - 1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [idx, go]);
+  }, [idx, go, gallery]);
 
   const onTouchStart = (e) => { touchX.current = e.touches[0].clientX; };
   const onTouchEnd = (e) => {
@@ -1119,8 +1297,45 @@ function Catalog({ isMobile }) {
                     alignItems: "stretch",
                   }}
                 >
-                  <div style={{ position: "relative", minWidth: 0, minHeight: 240 }}>
+                  <div onClick={() => setGallery(true)} style={{ position: "relative", minWidth: 0, minHeight: 240, cursor: "zoom-in" }}>
                     <Photo id={PRODUCT_PHOTOS[i]} alt={p.alt} style={{ position: "absolute", inset: 0 }} />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setGallery(true);
+                      }}
+                      tabIndex={i === idx ? 0 : -1}
+                      aria-label={c.morePhotos}
+                      className="h-lift"
+                      style={{
+                        position: "absolute",
+                        top: 20,
+                        right: 20,
+                        zIndex: 3,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        height: 40,
+                        padding: "0 14px 0 12px",
+                        borderRadius: 12,
+                        border: "none",
+                        background: "oklch(1 0 0 / 0.96)",
+                        cursor: "pointer",
+                        fontFamily: DISPLAY,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "oklch(0.25 0.01 80)",
+                        boxShadow: "0 4px 14px oklch(0.2 0.01 80 / 0.08)",
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
+                        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                      </svg>
+                      {c.photosCount(PRODUCT_GALLERIES[i].length)}
+                    </button>
                   </div>
                   <div style={{ minWidth: 0, padding: isMobile ? "28px 24px" : 36, display: "flex", flexDirection: "column", justifyContent: "flex-start" }}>
                     <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: C.accent, marginBottom: 12 }}>{p.note}</span>
@@ -1153,11 +1368,11 @@ function Catalog({ isMobile }) {
           </div>
 
           {/* Стрілки — один блок поверх слайдів, не їде разом із фото.
-              Десктоп: лівий нижній кут фото-колонки. Мобільний: правий верхній кут фото. */}
+              Десктоп: лівий нижній кут фото-колонки. Мобільний: лівий нижній кут фото (вгорі праворуч — кнопка галереї). */}
           <div
             style={{
               position: "absolute",
-              ...(isMobile ? { top: 16, right: 16 } : { left: 32, bottom: 32 }),
+              ...(isMobile ? { top: 240 - 16 - 48, left: 16 } : { left: 32, bottom: 32 }),
               display: "flex",
               alignItems: "center",
               gap: 2,
@@ -1177,6 +1392,17 @@ function Catalog({ isMobile }) {
           </div>
         </Reveal>
       </div>
+      {gallery && (
+        <Gallery
+          key={idx}
+          title={products[idx].name}
+          photos={PRODUCT_GALLERIES[idx]}
+          alt={products[idx].alt}
+          start={0}
+          onClose={closeGallery}
+          isMobile={isMobile}
+        />
+      )}
     </section>
   );
 }
