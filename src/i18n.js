@@ -1,0 +1,458 @@
+/* ============================================================
+   ТЕКСТИ САЙТУ — українська та англійська.
+   Структура обох мов однакова: додаючи рядок в одну, додайте і в іншу.
+   ============================================================ */
+
+export const T = {
+  uk: {
+    locale: "uk-UA",
+    company: "Заглушка", // TODO: назва компанії
+    meta: {
+      title: "Заглушка — дерев'яні ящики на замовлення",
+      description:
+        "Виробництво дерев'яних ящиків для транспортування, зберігання та пакування. Стабільна якість, ціни від виробника, доставка по всій Україні.",
+    },
+    nav: {
+      advantages: "Переваги",
+      catalog: "Каталог",
+      process: "Як працюємо",
+      quality: "Якість",
+      about: "Про нас",
+      order: "Контакти",
+    },
+    langLabel: "Switch to English",
+    copied: "Номер скопійовано",
+    copyHint: "Натисніть, щоб скопіювати номер",
+    callAria: "Зателефонувати",
+    address: "м. Місто, вул. Прикладна, 1", // TODO: реальна адреса
+
+    hero: {
+      badge: "Опт і роздріб",
+      badgeText: "Виробництво без посередників",
+      titlePre: "Ящики, на яких тримається ваша ",
+      titleAccent: "логістика",
+      titlePost: "",
+      lead: "Дерев'яні ящики для транспортування, зберігання та пакування. Стабільна якість, чіткі терміни, ціна від виробника.",
+      ctaCatalog: "Переглянути каталог",
+      ctaQuote: "Звʼязатися з нами",
+      checks: ["Ціна від виробника", "Партія від 5 штук", "Доставка по Україні"],
+    },
+
+    stats: {
+      photoAlt: "Стос дерев'яних ящиків на виробництві",
+      items: ["років на ринку", "ящиків на місяць", "клієнтів у B2B", "типовий термін"],
+      lead: "3–7 днів",
+    },
+
+    marqueeAria: "Галузі, для яких ми виробляємо",
+    industries: [
+      "Овочесховища",
+      "Меблеві цехи",
+      "Металообробка",
+      "Фермерські господарства",
+      "Виноробні",
+      "Пасіки",
+      "Пакувальні компанії",
+      "Логістичні оператори",
+    ],
+
+    advantages: {
+      eyebrow: "Переваги",
+      title: "Замовляють раз.",
+      accent: "Повертаються роками.",
+      sub: "Три речі, які для оптового клієнта важливіші за все інше.",
+      items: [
+        { t: "Якість матеріалу", d: "Суха деревина, контроль вологості та міцності на кожному етапі. Ящик не розсипається на другому рейсі." },
+        { t: "Будь-які об'єми", d: "Від десяти штук до регулярних поставок за графіком. Разові замовлення та довгострокові контракти." },
+        { t: "Чіткі терміни", d: "Узгоджуємо дату відвантаження на старті й тримаємо її. Власне виробництво — без черг у підрядників." },
+      ],
+    },
+
+    catalog: {
+      eyebrow: "Каталог",
+      title: "Чотири формати.",
+      accent: "Ціна від виробника.",
+      sub: "Ціни вказані від і залежать від об'єму партії та розміру. Точний розрахунок — за телефоном.",
+      prev: "Попередній",
+      next: "Наступний",
+      products: [
+        {
+          tab: "Малі ящики",
+          name: "Малі ящики",
+          note: "Дерево · роздріб і опт",
+          desc: "Компактний формат для дрібного пакування, комплектуючих та роздрібних поставок. Легко штабелюються, зручні для ручного перенесення й дрібних відправок.",
+          tags: ["Дрібне пакування", "Комплектуючі", "Роздріб"],
+          stats: [["Розмір", "~20–30 см"], ["Навантаження", "до 10 кг"], ["Мін. партія", "10 шт"]],
+          price: "від 45 ₴",
+          priceSuffix: "/ шт",
+          cta: "Дізнатись деталі",
+          alt: "Малі дерев'яні ящики",
+        },
+        {
+          tab: "Середні ящики",
+          name: "Середні ящики",
+          note: "Дерево · роздріб і опт",
+          desc: "Універсальний робочий формат: овочі, фрукти, деталі, інструмент. Найпопулярніша позиція серед постійних клієнтів і базовий вибір для регулярних поставок.",
+          tags: ["Овочі та фрукти", "Інструмент", "Складське зберігання"],
+          stats: [["Розмір", "~30–40 см"], ["Навантаження", "до 25 кг"], ["Мін. партія", "10 шт"]],
+          price: "від 65 ₴",
+          priceSuffix: "/ шт",
+          cta: "Дізнатись деталі",
+          alt: "Середні дерев'яні ящики з яблуками",
+        },
+        {
+          tab: "Великі ящики",
+          name: "Великі ящики",
+          note: "Дерево · переважно опт",
+          desc: "Формат від пів метра для транспортування та зберігання важких вантажів. Посилена конструкція, витримує багаторазове використання.",
+          tags: ["Важкі вантажі", "Транспортування", "Багаторазове використання"],
+          stats: [["Розмір", "від 50 см"], ["Навантаження", "до 80 кг"], ["Мін. партія", "5 шт"]],
+          price: "від 110 ₴",
+          priceSuffix: "/ шт",
+          cta: "Дізнатись деталі",
+          alt: "Великі тарні дерев'яні ящики",
+        },
+        {
+          tab: "Під ваш розмір",
+          name: "Нестандартні розміри",
+          note: "Дерево · під замовлення",
+          desc: "Виготовляємо за вашими креслениками або під конкретний вантаж. Підбираємо розмір, товщину дошки та тип кріплення під ваше завдання.",
+          tags: ["За креслеником", "Під конкретний вантаж", "Спецконструкція"],
+          stats: [["Розмір", "за ТЗ"], ["Термін", "7–14 днів"], ["Мін. партія", "20 шт"]],
+          price: "за прорахунком",
+          priceSuffix: "",
+          cta: "Надіслати ТЗ",
+          alt: "Виготовлення ящиків під розмір замовника",
+        },
+      ],
+    },
+
+    faq: {
+      eyebrow: "Питання та відповіді",
+      title: "Що питають найчастіше",
+      accent: "перед першим замовленням.",
+      photoAlt: "Ящики з продукцією",
+      ctaTitle: "Не знайшли відповідь?",
+      ctaText: "Опишіть вантаж — підкажемо розмір і конструкцію.",
+      ctaBtn: "Поставити питання",
+      items: [
+        { q: "Яка мінімальна партія?", a: "Від 5 штук для великих ящиків і від 10 — для малих і середніх. На нестандартні розміри мінімум — 20 штук, бо потрібне окреме налаштування розкрою." },
+        { q: "Скільки чекати замовлення?", a: "Типові розміри — 3–7 днів. Нестандартні — 7–14 днів залежно від складності та завантаженості цеху." },
+        { q: "Чи можна зробити ящик під мій розмір?", a: "Так. Працюємо за вашим креслеником або підбираємо конструкцію під конкретний вантаж." },
+        { q: "Яка деревина використовується?", a: "[Порода деревини]. Дошка суха, калібрована, без обзолу та великих сучків." },
+        { q: "Ви доставляєте?", a: "Так, по всій Україні. [Умови та тарифи доставки]." },
+        { q: "Як оплатити?", a: "[Безготівковий розрахунок / готівка]. Для оптових клієнтів можлива відстрочка за договором." },
+      ],
+    },
+
+    useCases: {
+      eyebrow: "Застосування",
+      title: "Ящик під задачу,",
+      accent: "а не універсальний.",
+      sub: "Шість типових задач, під які клієнти беруть партії найчастіше.",
+      photoAlt: "Ящики з продукцією",
+      items: [
+        { t: "Овочі та фрукти", d: "Вентильовані стінки, безпечно для харчових продуктів." },
+        { t: "Складське зберігання", d: "Штабелюються без деформації, витримують сезон за сезоном." },
+        { t: "Міжміська логістика", d: "Посилені кути й дно — вантаж доїжджає цілим." },
+        { t: "Обладнання й деталі", d: "Конструкція під конкретну вагу та габарит." },
+        { t: "Фірмове маркування", d: "Охайний вигляд, можна нанести логотип чи маркування." },
+        { t: "Експорт", d: "Пакет документів на партію, палетне пакування." },
+      ],
+    },
+
+    process: {
+      eyebrow: "Як ми працюємо",
+      title: "Від дзвінка",
+      accent: "до відвантаження.",
+      sub: "Чотири кроки без сюрпризів. Дата, яку називаємо на другому кроці, — та сама, яку бачите на четвертому.",
+      steps: [
+        { t: "Дзвінок або заявка", d: "Кажете розмір, орієнтовний об'єм і куди везти. Не знаєте розмір — підберемо за вашим вантажем.", time: "5 хв" },
+        { t: "Прорахунок і зразок", d: "Даємо точну ціну та дату відвантаження. За потреби надсилаємо зразок перед стартом партії.", time: "до 24 год" },
+        { t: "Виробництво", d: "Розкрій, сушіння, збірка, контроль вологості й міцності. Тримаємо дату, узгоджену на старті.", time: "3–10 днів" },
+        { t: "Відвантаження", d: "Пакуємо на палети, передаємо перевізнику або своїм транспортом. Документи — разом із партією.", time: "у день готовності" },
+      ],
+    },
+
+    quality: {
+      title: "Сертифікати та якість",
+      text: "Продукція відповідає стандартам якості пакувальних матеріалів для транспортування та зберігання. Повний пакет документів надаємо оптовим клієнтам за запитом.",
+      cert: "СЕРТИФІКАТ",
+    },
+
+    about: {
+      eyebrow: "Про компанію",
+      title: "Виробляємо самі.",
+      accent: "Продаємо напряму.",
+      p1: (name) =>
+        `«${name}» — виробник дерев'яних ящиків для бізнесу: аграрних підприємств, логістичних компаній та виробництв. Працюємо напряму, без посередників, тому ціна нижча за ринкову.`,
+      p2: "Приймаємо як разові замовлення, так і довгострокові контракти на постачання з фіксованим графіком відвантажень.",
+      facts: [
+        ["Власне виробництво", "[м²]"], // TODO: площа виробництва, напр. "2 400 м²"
+        ["Географія поставок", "Вся Україна"],
+        ["Форма оплати", "Нал / безнал"],
+        ["Мінімальне замовлення", "від 5 шт"],
+        ["Типовий термін", "3–7 днів"],
+      ],
+    },
+
+    order: {
+      eyebrow: "Замовлення",
+      title: "Назвемо точну ціну",
+      accent: "за один дзвінок.",
+      text: "Скажіть розмір і кількість — почуєте ціну й термін виготовлення відразу. Не знаєте розмір? Опишіть вантаж, підберемо самі.",
+      hours: "Пн–Пт, 9:00–18:00",
+      messengers: "Або напишіть нам у месенджер",
+      name: "Ваше ім'я",
+      namePh: "Олександр",
+      phone: "Телефон",
+      phonePh: "+38 (0__) ___-__-__",
+      email: "Email",
+      emailPh: "name@company.com",
+      or: "або",
+      contactHint: "Достатньо телефону або email — як вам зручніше.",
+      need: "Що потрібно",
+      needPh: "Наприклад: середні ящики, 300 шт, під яблука, доставка у Львів",
+      errName: "Вкажіть імʼя, щоб знати, до кого звертатись.",
+      errContact: "Залиште телефон або email — інакше ми не зможемо з вами звʼязатися.",
+      errPhone: "Перевірте номер — здається, бракує цифр.",
+      errEmail: "Перевірте email — схоже, в адресі помилка.",
+      errSend: "Не вдалося надіслати заявку. Спробуйте ще раз або зателефонуйте нам.",
+      submit: "Надіслати заявку",
+      sending: "Надсилаємо…",
+      note: "Передзвонюємо за 15 хвилин · без спаму",
+      okTitle: "Заявку прийнято",
+      okText: (phone, email) =>
+        phone
+          ? `Передзвонимо на ${phone} протягом 15 хвилин у робочі години.`
+          : `Напишемо на ${email} протягом робочого дня.`,
+      again: "Надіслати ще одну",
+    },
+  },
+
+  en: {
+    locale: "en-GB",
+    company: "Zahlushka", // TODO: company name in English
+    meta: {
+      title: "Zahlushka — custom wooden crates",
+      description:
+        "Wooden crates for transport, storage and packaging. Consistent quality, factory prices, delivery across Ukraine.",
+    },
+    nav: {
+      advantages: "Benefits",
+      catalog: "Catalogue",
+      process: "How we work",
+      quality: "Quality",
+      about: "About",
+      order: "Contact",
+    },
+    langLabel: "Перемкнути на українську",
+    copied: "Number copied",
+    copyHint: "Click to copy the number",
+    callAria: "Call",
+    address: "1 Example St, City, Ukraine", // TODO: real address
+
+    hero: {
+      badge: "Wholesale & retail",
+      badgeText: "Made by us, no middlemen",
+      titlePre: "Crates that keep your ",
+      titleAccent: "logistics",
+      titlePost: " moving",
+      lead: "Wooden crates for transport, storage and packaging. Consistent quality, reliable lead times, factory prices.",
+      ctaCatalog: "View catalogue",
+      ctaQuote: "Contact us",
+      checks: ["Factory prices", "Orders from 5 pcs", "Delivery across Ukraine"],
+    },
+
+    stats: {
+      photoAlt: "Stack of wooden crates at the workshop",
+      items: ["years in business", "crates per month", "B2B clients", "typical lead time"],
+      lead: "3–7 days",
+    },
+
+    marqueeAria: "Industries we make crates for",
+    industries: [
+      "Vegetable storage",
+      "Furniture workshops",
+      "Metalworking",
+      "Farms",
+      "Wineries",
+      "Apiaries",
+      "Packaging companies",
+      "Logistics operators",
+    ],
+
+    advantages: {
+      eyebrow: "Benefits",
+      title: "They order once.",
+      accent: "They come back for years.",
+      sub: "Three things that matter most to a wholesale buyer.",
+      items: [
+        { t: "Quality timber", d: "Kiln-dried wood with moisture and strength checks at every stage. The crate won't fall apart on its second trip." },
+        { t: "Any volume", d: "From ten pieces to scheduled recurring deliveries. One-off orders and long-term contracts." },
+        { t: "Reliable lead times", d: "We agree the shipping date up front and stick to it. Our own production — no waiting on subcontractors." },
+      ],
+    },
+
+    catalog: {
+      eyebrow: "Catalogue",
+      title: "Four formats.",
+      accent: "Factory prices.",
+      sub: "Prices shown are starting prices and depend on batch size and dimensions. Call us for an exact quote.",
+      prev: "Previous",
+      next: "Next",
+      products: [
+        {
+          tab: "Small crates",
+          name: "Small crates",
+          note: "Wood · retail & wholesale",
+          desc: "A compact format for small items, components and retail shipments. Stacks easily and is convenient to carry by hand and send in small batches.",
+          tags: ["Small packaging", "Components", "Retail"],
+          stats: [["Size", "~20–30 cm"], ["Load", "up to 10 kg"], ["Min. order", "10 pcs"]],
+          price: "from ₴45",
+          priceSuffix: "/ pc",
+          cta: "Learn more",
+          alt: "Small wooden crates",
+        },
+        {
+          tab: "Medium crates",
+          name: "Medium crates",
+          note: "Wood · retail & wholesale",
+          desc: "The all-round working format: vegetables, fruit, parts, tools. Our most popular item among regular clients and the go-to choice for recurring deliveries.",
+          tags: ["Fruit & vegetables", "Tools", "Warehouse storage"],
+          stats: [["Size", "~30–40 cm"], ["Load", "up to 25 kg"], ["Min. order", "10 pcs"]],
+          price: "from ₴65",
+          priceSuffix: "/ pc",
+          cta: "Learn more",
+          alt: "Medium wooden crates with apples",
+        },
+        {
+          tab: "Large crates",
+          name: "Large crates",
+          note: "Wood · mostly wholesale",
+          desc: "Half a metre and up, for transporting and storing heavy loads. Reinforced construction built for repeated use.",
+          tags: ["Heavy loads", "Transport", "Reusable"],
+          stats: [["Size", "from 50 cm"], ["Load", "up to 80 kg"], ["Min. order", "5 pcs"]],
+          price: "from ₴110",
+          priceSuffix: "/ pc",
+          cta: "Learn more",
+          alt: "Large wooden shipping crates",
+        },
+        {
+          tab: "Custom size",
+          name: "Custom sizes",
+          note: "Wood · made to order",
+          desc: "Built to your drawings or around a specific load. We choose the size, board thickness and fastening type to suit the job.",
+          tags: ["To your drawing", "For a specific load", "Special builds"],
+          stats: [["Size", "to spec"], ["Lead time", "7–14 days"], ["Min. order", "20 pcs"]],
+          price: "on request",
+          priceSuffix: "",
+          cta: "Send your spec",
+          alt: "Crates made to the customer's size",
+        },
+      ],
+    },
+
+    faq: {
+      eyebrow: "Questions & answers",
+      title: "What people ask most",
+      accent: "before their first order.",
+      photoAlt: "Crates filled with produce",
+      ctaTitle: "Didn't find your answer?",
+      ctaText: "Describe your load — we'll suggest the size and build.",
+      ctaBtn: "Ask a question",
+      items: [
+        { q: "What is the minimum order?", a: "5 pieces for large crates and 10 for small and medium ones. Custom sizes start at 20 pieces, since they need a separate cutting setup." },
+        { q: "How long does an order take?", a: "Standard sizes take 3–7 days. Custom ones take 7–14 days depending on complexity and workshop load." },
+        { q: "Can you make a crate to my size?", a: "Yes. We work from your drawing or design the construction around a specific load." },
+        { q: "What wood do you use?", a: "[Wood species]. Dry, calibrated boards without wane or large knots." },
+        { q: "Do you deliver?", a: "Yes, across Ukraine. [Delivery terms and rates]." },
+        { q: "How can I pay?", a: "[Bank transfer / cash]. Deferred payment is available to wholesale clients under contract." },
+      ],
+    },
+
+    useCases: {
+      eyebrow: "Applications",
+      title: "A crate built for the job,",
+      accent: "not one-size-fits-all.",
+      sub: "Six typical jobs our clients order batches for most often.",
+      photoAlt: "Crates filled with produce",
+      items: [
+        { t: "Fruit & vegetables", d: "Ventilated sides, safe for food products." },
+        { t: "Warehouse storage", d: "Stack without warping and last season after season." },
+        { t: "Long-haul logistics", d: "Reinforced corners and base — the load arrives intact." },
+        { t: "Equipment & parts", d: "Construction matched to the exact weight and dimensions." },
+        { t: "Branded marking", d: "A neat finish, with your logo or markings if needed." },
+        { t: "Export", d: "Full paperwork for each batch, palletised packing." },
+      ],
+    },
+
+    process: {
+      eyebrow: "How we work",
+      title: "From the first call",
+      accent: "to shipment.",
+      sub: "Four steps, no surprises. The date we give you at step two is the same one you see at step four.",
+      steps: [
+        { t: "Call or request", d: "Tell us the size, rough volume and destination. Not sure about the size? We'll match it to your load.", time: "5 min" },
+        { t: "Quote & sample", d: "We give you an exact price and shipping date. If needed, we send a sample before the batch starts.", time: "within 24 h" },
+        { t: "Production", d: "Cutting, drying, assembly, moisture and strength checks. We keep the date agreed at the start.", time: "3–10 days" },
+        { t: "Shipment", d: "Packed on pallets and handed to a carrier or delivered by our own transport. Paperwork travels with the batch.", time: "on completion day" },
+      ],
+    },
+
+    quality: {
+      title: "Certificates & quality",
+      text: "Our products meet quality standards for packaging materials used in transport and storage. Wholesale clients receive the full set of documents on request.",
+      cert: "CERTIFICATE",
+    },
+
+    about: {
+      eyebrow: "About us",
+      title: "We make them ourselves.",
+      accent: "We sell direct.",
+      p1: (name) =>
+        `${name} manufactures wooden crates for businesses: agricultural companies, logistics firms and manufacturers. We sell direct, with no middlemen, so our prices are below market.`,
+      p2: "We take both one-off orders and long-term supply contracts with a fixed shipping schedule.",
+      facts: [
+        ["Own production", "[m²]"], // TODO: production area, e.g. "2,400 m²"
+        ["Delivery area", "All of Ukraine"],
+        ["Payment", "Cash / bank transfer"],
+        ["Minimum order", "from 5 pcs"],
+        ["Typical lead time", "3–7 days"],
+      ],
+    },
+
+    order: {
+      eyebrow: "Order",
+      title: "We'll give you an exact price",
+      accent: "in a single call.",
+      text: "Tell us the size and quantity — you'll hear the price and lead time right away. Not sure about the size? Describe your load and we'll pick it for you.",
+      hours: "Mon–Fri, 9:00–18:00",
+      messengers: "Or message us",
+      name: "Your name",
+      namePh: "Alex",
+      phone: "Phone",
+      phonePh: "+38 (0__) ___-__-__",
+      email: "Email",
+      emailPh: "name@company.com",
+      or: "or",
+      contactHint: "Phone or email is enough — whichever suits you.",
+      need: "What you need",
+      needPh: "E.g. medium crates, 300 pcs, for apples, delivery to Lviv",
+      errName: "Please enter your name so we know who to ask for.",
+      errContact: "Please leave a phone number or email — otherwise we can't get back to you.",
+      errPhone: "Please check the number — some digits seem to be missing.",
+      errEmail: "Please check your email — the address looks incorrect.",
+      errSend: "Couldn't send your request. Please try again or give us a call.",
+      submit: "Send request",
+      sending: "Sending…",
+      note: "We call back within 15 minutes · no spam",
+      okTitle: "Request received",
+      okText: (phone, email) =>
+        phone
+          ? `We'll call you at ${phone} within 15 minutes during business hours.`
+          : `We'll email you at ${email} within one business day.`,
+      again: "Send another one",
+    },
+  },
+};

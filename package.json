@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "fetch:images": "node scripts/fetch-images.mjs"
+    "fetch:images": "node scripts/fetch-images.mjs",
+    "tg:webhook": "node scripts/telegram-webhook.mjs",
+    "tg:poll": "node scripts/telegram-poll.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

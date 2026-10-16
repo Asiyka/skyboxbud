@@ -1,24 +1,32 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, createContext, useContext } from "react";
+import { T } from "./i18n.js";
+import { validateLead } from "../api/_validate.js";
 
 /* ============================================================
-   ЗАГЛУШКА — дерев'яні ящики. Стиль v2.
+   ЗАГЛУШКА — дерев'яні ящики. Стиль 1:1 з Claude Design
+   («Лендінг ящиків v3»). Усі тексти — у src/i18n.js.
    ============================================================ */
 
 const C = {
-  bg: "oklch(0.985 0.006 85)",
-  bgAlt: "oklch(0.955 0.008 85)",
+  bg: "oklch(0.982 0.007 84)",
+  bgAlt: "oklch(0.955 0.014 82)",
   card: "oklch(1 0 0)",
   ink: "oklch(0.2 0.01 80)",
   inkHover: "oklch(0.32 0.01 80)",
+  text2: "oklch(0.35 0.01 80)",
+  lead: "oklch(0.42 0.01 80)",
   body: "oklch(0.45 0.01 80)",
   muted: "oklch(0.5 0.01 80)",
   soft: "oklch(0.55 0.01 80)",
-  line: "oklch(0.93 0.006 85)",
+  line: "oklch(0.905 0.009 84)",
+  lineSoft: "oklch(0.94 0.006 85)",
+  chip: "oklch(0.955 0.008 84)",
   accent: "oklch(0.62 0.13 45)",
-  accentDeep: "oklch(0.5 0.13 45)",
+  accentDeep: "oklch(0.54 0.13 45)",
   accentSoft: "oklch(0.93 0.06 45)",
+  accentTint: "oklch(0.945 0.04 60)",
   accentText: "oklch(0.42 0.13 45)",
-  green: "oklch(0.72 0.15 145)",
+  accentHead: "oklch(0.58 0.14 45)",
   onDark: "oklch(0.985 0.006 85)",
   onDarkSoft: "oklch(0.78 0.01 80)",
 };
@@ -26,43 +34,49 @@ const C = {
 const DISPLAY = "'Sora', sans-serif";
 const BODY = "'Public Sans', sans-serif";
 
-/* ============================================================
-   ВАРІАНТИ СТОРІНКИ
-   contact: "form"  — секція із зворотною формою
-            "phone" — тільки номер телефону
-   SHOW_SWITCHER — плаваючий перемикач для показу клієнту.
-                   Перед здачею в прод постав false.
-   ============================================================ */
-const DEFAULT_VARIANT = { contact: "form" };
-const SHOW_SWITCHER = true; // true — лишити для демонстрації клієнту, false — для продакшну
+const PAD_H = "min(6vw, 88px)";
+const MAXW = 1200;
+
+/* Плавна крива для розкриття/згортання — довго «доїжджає», без ривка в кінці. */
+const EASE_OUT = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 /* ============================================================
    ДАНІ КОМПАНІЇ — обов'язково замінити перед публікацією
+   (назва та адреса — у src/i18n.js, окремо для кожної мови)
    ============================================================ */
 const PHONE_HREF = "tel:+380000000000"; // TODO: реальний номер, формат tel:+380XXXXXXXXX
 const PHONE_TEXT = "+38 (000) 000-00-00"; // TODO: той самий номер у зручному для читання форматі
-const COMPANY_NAME = "Заглушка"; // TODO: назва компанії
-const COMPANY_ADDRESS = "м. Місто, вул. Прикладна, 1"; // TODO: реальна адреса
-const PRODUCTION_AREA = "[м²]"; // TODO: площа власного виробництва, напр. "2 400 м²"
 
 /* Локальні фото — public/images/. Завантажуються один раз скриптом
    scripts/fetch-images.mjs (npm run fetch:images), див. README. */
 const IMG = {
   warehouse: "warehouse",
-  wineBoxes: "small-crates",
-  apples: "medium-crates",
-  planks: "custom-crates",
-  timber: "large-crates",
+  small: "small-crates",
+  medium: "medium-crates",
+  custom: "custom-crates",
+  large: "large-crates",
 };
+const PRODUCT_PHOTOS = [IMG.small, IMG.medium, IMG.large, IMG.custom];
 
 const src = (id) => `/images/${id}.jpg`;
 
+/* ---------- мова ---------- */
+
+const LangCtx = createContext(null);
+const useT = () => useContext(LangCtx);
+
+function readLang() {
+  try {
+    const saved = localStorage.getItem("lang");
+    if (saved === "uk" || saved === "en") return saved;
+  } catch {}
+  return "uk";
+}
+
 /* ---------- утиліти ---------- */
 
-const fmt = (n) => new Intl.NumberFormat("uk-UA").format(Math.round(n));
-
 function useMedia(q) {
-  const [m, setM] = useState(false);
+  const [m, setM] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
   useEffect(() => {
     const mq = window.matchMedia(q);
     const on = () => setM(mq.matches);
@@ -73,7 +87,7 @@ function useMedia(q) {
   return m;
 }
 
-function useReveal(threshold = 0.15) {
+function useReveal(threshold = 0.05) {
   const ref = useRef(null);
   const [on, setOn] = useState(false);
   useEffect(() => {
@@ -86,7 +100,7 @@ function useReveal(threshold = 0.15) {
           io.disconnect();
         }
       },
-      { threshold, rootMargin: "0px 0px -60px 0px" }
+      { threshold }
     );
     io.observe(el);
     return () => io.disconnect();
@@ -94,15 +108,15 @@ function useReveal(threshold = 0.15) {
   return [ref, on];
 }
 
-function Reveal({ children, delay = 0, y = 28, style, as: Tag = "div", ...rest }) {
+function Reveal({ children, delay = 0, style, as: Tag = "div", ...rest }) {
   const [ref, on] = useReveal();
   return (
     <Tag
       ref={ref}
       style={{
         opacity: on ? 1 : 0,
-        transform: on ? "none" : `translate3d(0,${y}px,0)`,
-        transition: `opacity 800ms cubic-bezier(.16,1,.3,1) ${delay}ms, transform 800ms cubic-bezier(.16,1,.3,1) ${delay}ms`,
+        transform: on ? "none" : "translateY(18px)",
+        transition: `opacity 620ms cubic-bezier(0.2,0,0.2,1) ${delay}ms, transform 620ms cubic-bezier(0.2,0,0.2,1) ${delay}ms`,
         ...style,
       }}
       {...rest}
@@ -112,7 +126,8 @@ function Reveal({ children, delay = 0, y = 28, style, as: Tag = "div", ...rest }
   );
 }
 
-function CountUp({ to, suffix = "", duration = 1600 }) {
+function CountUp({ to, suffix = "", duration = 1400 }) {
+  const { t } = useT();
   const [ref, on] = useReveal(0.4);
   const [v, setV] = useState(0);
   useEffect(() => {
@@ -120,8 +135,8 @@ function CountUp({ to, suffix = "", duration = 1600 }) {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return setV(to);
     let raf;
     const t0 = performance.now();
-    const tick = (t) => {
-      const p = Math.min((t - t0) / duration, 1);
+    const tick = (now) => {
+      const p = Math.min((now - t0) / duration, 1);
       setV(to * (1 - Math.pow(1 - p, 3)));
       if (p < 1) raf = requestAnimationFrame(tick);
     };
@@ -130,211 +145,254 @@ function CountUp({ to, suffix = "", duration = 1600 }) {
   }, [on, to, duration]);
   return (
     <span ref={ref}>
-      {fmt(v)}
+      {new Intl.NumberFormat(t.locale).format(Math.round(v))}
       {suffix}
     </span>
   );
 }
 
-/* ---------- фото з плавною появою ---------- */
+/* ---------- телефон: на компʼютері копіюємо номер (tel: там нікуди не веде) ---------- */
 
-function Photo({ id, alt, w = 1400, h, ratio, radius = 0, zoom = true, style, imgStyle }) {
-  const [loaded, setLoaded] = useState(false);
+const canHover = () => window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+/** Копіює текст; повертає true, якщо вдалося. Clipboard API іноді «зависає» без фокусу вікна —
+    тоді за мить пробуємо старий спосіб через прихований textarea. */
+async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await Promise.race([navigator.clipboard.writeText(text), new Promise((_, no) => setTimeout(no, 700))]);
+      return true;
+    }
+  } catch {}
+  const ta = Object.assign(document.createElement("textarea"), { value: text });
+  ta.setAttribute("readonly", "");
+  ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {}
+  ta.remove();
+  return ok;
+}
+
+const toast = (text) => window.dispatchEvent(new CustomEvent("toast", { detail: text }));
+
+/** Пропси для посилання на телефон: на телефоні дзвонить, на компʼютері копіює номер. */
+function phoneProps(t) {
+  return {
+    href: PHONE_HREF,
+    onClick: (e) => {
+      if (!canHover()) return;
+      e.preventDefault();
+      // Навіть якщо браузер не дав скопіювати — показуємо номер, щоб його можна було переписати.
+      copyText(PHONE_TEXT).then((ok) => toast(ok ? `✓ ${t.copied}: ${PHONE_TEXT}` : `📞 ${PHONE_TEXT}`));
+    },
+    onMouseEnter: (e) => {
+      if (canHover()) e.currentTarget.title = t.copyHint;
+    },
+  };
+}
+
+function Toast() {
+  // Текст і видимість окремо: при зникненні текст лишається, поки йде анімація.
+  const [text, setText] = useState("");
+  const [msg, setMsg] = useState(false);
+  useEffect(() => {
+    let timer;
+    const on = (e) => {
+      setText(e.detail);
+      setMsg(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setMsg(false), 2400);
+    };
+    window.addEventListener("toast", on);
+    return () => {
+      window.removeEventListener("toast", on);
+      clearTimeout(timer);
+    };
+  }, []);
   return (
     <div
-      className={zoom ? "ph-wrap" : ""}
+      role="status"
+      aria-live="polite"
       style={{
-        position: "relative",
-        overflow: "hidden",
-        borderRadius: radius,
-        background: C.bgAlt,
-        aspectRatio: ratio,
-        ...style,
+        position: "fixed",
+        left: "50%",
+        bottom: 28,
+        zIndex: 100,
+        transform: `translate(-50%, ${msg ? 0 : 16}px)`,
+        opacity: msg ? 1 : 0,
+        pointerEvents: "none",
+        transition: `opacity 260ms ease, transform 360ms ${EASE_OUT}`,
+        padding: "12px 20px",
+        borderRadius: 999,
+        background: C.ink,
+        color: C.onDark,
+        fontSize: 14,
+        fontWeight: 600,
+        boxShadow: "0 10px 30px oklch(0.2 0.01 80 / 0.25)",
+        whiteSpace: "nowrap",
       }}
     >
-      <div
-        className="shimmer"
-        style={{
-          position: "absolute",
-          inset: 0,
-          opacity: loaded ? 0 : 1,
-          transition: "opacity 500ms",
-        }}
-      />
+      {text}
+    </div>
+  );
+}
+
+/* ---------- фото з плавною появою (фон — смугастий плейсхолдер з дизайну) ---------- */
+
+const STRIPES = "repeating-linear-gradient(115deg, oklch(0.915 0.014 82) 0 14px, oklch(0.945 0.012 82) 14px 28px)";
+
+function Photo({ id, alt, radius = 0, style }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: radius, background: STRIPES, ...style }}>
       <img
-        src={src(id, w, h)}
+        src={src(id)}
         alt={alt}
         loading="lazy"
         onLoad={() => setLoaded(true)}
-        className={zoom ? "ph-img" : ""}
         style={{
+          position: "absolute",
+          inset: 0,
           width: "100%",
           height: "100%",
           objectFit: "cover",
           display: "block",
           opacity: loaded ? 1 : 0,
-          transition: "opacity 700ms ease, transform 900ms cubic-bezier(.16,1,.3,1)",
-          ...imgStyle,
+          transition: "opacity 700ms ease",
         }}
       />
     </div>
   );
 }
 
-/* ---------- дані ---------- */
+/* shape — форма акцентної мітки в іконці переваг (як у дизайні: квадрат, коло, риска) */
+const ADV_SHAPES = [
+  { width: 15, height: 15, borderRadius: 4 },
+  { width: 15, height: 15, borderRadius: "50%" },
+  { width: 15, height: 4, borderRadius: 2 },
+];
 
-const PRODUCTS = [
+/* Пункти меню в порядку секцій на сторінці */
+const NAV = ["advantages", "catalog", "process", "quality", "about", "order"];
+const SECTION_ID = {
+  advantages: "advantages",
+  catalog: "catalog",
+  process: "process",
+  quality: "quality",
+  about: "about",
+  order: "order",
+};
+/* Секції, що підсвічують пункт меню: «Як працюємо» = кроки + застосування + питання */
+const SECTION_NAV = { ...Object.fromEntries(NAV.map((k) => [SECTION_ID[k], k])), "use-cases": "process", faq: "process" };
+
+/* ============================================================
+   МЕСЕНДЖЕРИ — замінити на реальні контакти
+   ============================================================ */
+const MESSENGERS = [
   {
-    id: "small",
-    name: "Малі ящики",
-    note: "Ручне перенесення",
-    size: "20–30 см",
-    load: "до 10 кг",
-    min: 10,
-    price: 45,
-    lead: "3–5 днів",
-    photo: IMG.wineBoxes,
-    alt: "Малі дерев'яні ящики",
-    desc:
-      "Компактний формат для дрібного пакування та комплектуючих. Легко штабелюються, зручні для ручного перенесення.",
-    fits: ["Ягоди й зелень", "Комплектуючі", "Подарункове пакування"],
+    id: "telegram",
+    name: "Telegram",
+    href: "https://t.me/your_username", // TODO: ваш username у Telegram (без @)
+    color: "#229ED9",
+    icon: (
+      <path
+        fill="currentColor"
+        d="M21.4 4.1 2.9 11.2c-1.3.5-1.2 1.2-.2 1.5l4.7 1.5 1.8 5.6c.2.6.4.8.8.8.4 0 .6-.2.9-.4l2.3-2.2 4.7 3.5c.9.5 1.5.2 1.7-.8l3.1-14.6c.3-1.3-.5-1.9-1.3-1.6ZM9.6 14.4l-.4 4 -1.4-4.6 10.4-6.6c.5-.3.9-.1.5.2l-9.1 7Z"
+      />
+    ),
   },
   {
-    id: "medium",
-    name: "Середні ящики",
-    note: "Найчастіше замовляють",
-    size: "30–40 см",
-    load: "до 25 кг",
-    min: 10,
-    price: 65,
-    lead: "3–7 днів",
-    photo: IMG.apples,
-    alt: "Середні дерев'яні ящики з яблуками",
-    desc:
-      "Універсальний робочий формат: овочі, фрукти, деталі, інструмент. Найпопулярніша позиція серед постійних клієнтів.",
-    fits: ["Овочі та фрукти", "Інструмент", "Складське зберігання"],
+    id: "whatsapp",
+    name: "WhatsApp",
+    href: "https://wa.me/380000000000", // TODO: номер у міжнародному форматі без «+» і пробілів
+    color: "#25D366",
+    icon: (
+      <>
+        <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3Z" />
+        <path
+          fill="currentColor"
+          d="M9 7.6c.2-.4.4-.4.7-.4h.5c.2 0 .4 0 .6.4l.7 1.7c.1.2.1.4 0 .6l-.5.6c-.1.2-.2.4 0 .6.5.9 1.3 1.7 2.2 2.2.2.1.4.1.6 0l.6-.7c.2-.2.4-.2.6-.1l1.6.8c.2.1.4.2.4.4 0 .7-.3 1.3-.9 1.6-.6.3-1.3.4-2.1.2-1.3-.4-2.5-1.2-3.5-2.2s-1.7-2.1-2-3.3c-.2-.8-.2-1.5.1-2.1Z"
+        />
+      </>
+    ),
   },
   {
-    id: "large",
-    name: "Великі ящики",
-    note: "Посилена конструкція",
-    size: "від 50 см",
-    load: "до 80 кг",
-    min: 5,
-    price: 110,
-    lead: "5–10 днів",
-    photo: IMG.timber,
-    alt: "Великі тарні дерев'яні ящики",
-    desc:
-      "Формат від пів метра для транспортування та зберігання важких вантажів. Посилена конструкція витримує багаторазове використання.",
-    fits: ["Обладнання", "Металовироби", "Міжміська логістика"],
-  },
-  {
-    id: "custom",
-    name: "Під ваш розмір",
-    note: "За вашим кресленням",
-    size: "за кресленням",
-    load: "за ТЗ",
-    min: 20,
-    price: 95,
-    lead: "7–12 днів",
-    photo: IMG.planks,
-    alt: "Виготовлення ящиків під розмір замовника",
-    desc:
-      "Виготовимо ящик під конкретний вузол, палету чи стелаж. Надішліть розміри або креслення — прорахуємо й зробимо зразок.",
-    fits: ["Нестандартні вузли", "Під палету", "Під стелаж"],
+    id: "viber",
+    name: "Viber",
+    href: "viber://chat?number=%2B380000000000", // TODO: номер після %2B — без «+» і пробілів
+    color: "#7360F2",
+    icon: (
+      <>
+        <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" d="M12 3c-5 0-8 2.3-8 7.3 0 2.7.9 4.5 2.7 5.6V20l2.9-2.4c.8.1 1.6.2 2.4.2 5 0 8-2.3 8-7.5S17 3 12 3Z" />
+        <path
+          fill="currentColor"
+          d="M9.4 7.4c.2-.3.4-.3.6-.3h.4c.2 0 .3 0 .5.3l.6 1.4c.1.2 0 .4-.1.5l-.4.5c-.1.1-.1.3 0 .5.4.7 1 1.3 1.7 1.7.2.1.3.1.5 0l.5-.5c.1-.1.3-.2.5-.1l1.3.6c.2.1.3.2.3.4 0 .6-.3 1.1-.7 1.3-.5.2-1.1.3-1.7.1-1.1-.3-2-.9-2.8-1.7-.8-.8-1.4-1.8-1.6-2.7-.2-.6-.1-1.2.1-1.6Z"
+        />
+        <path fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" d="M13.2 6.6a3.4 3.4 0 0 1 3.1 3.1M13.3 8.2a1.7 1.7 0 0 1 1.5 1.5" />
+      </>
+    ),
   },
 ];
 
+const isExternal = (href) => href.startsWith("http");
 
-const INDUSTRIES = [
-  "Агропідприємства",
-  "Логістика",
-  "Овочесховища",
-  "Меблеві цехи",
-  "Металообробка",
-  "Фермерські господарства",
-  "Виноробні",
-  "Пасіки",
-  "Пакувальні компанії",
-];
+function MessengerIcon({ m, size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ display: "block", flexShrink: 0 }}>
+      {m.icon}
+    </svg>
+  );
+}
 
-const STEPS = [
-  { t: "Дзвінок або заявка", d: "Кажете розмір, орієнтовний об'єм і куди везти. Не знаєте розмір — підберемо за вашим вантажем.", time: "5 хв" },
-  { t: "Прорахунок і зразок", d: "Даємо точну ціну та дату відвантаження. За потреби надсилаємо зразок перед стартом партії.", time: "до 24 год" },
-  { t: "Виробництво", d: "Розкрій, сушіння, збірка, контроль вологості й міцності. Тримаємо дату, узгоджену на старті.", time: "3–10 днів" },
-  { t: "Відвантаження", d: "Пакуємо на палети, передаємо перевізнику або своїм транспортом. Документи — разом із партією.", time: "у день готовності" },
-];
-
-const CASES = [
-  { t: "Овочі та фрукти", d: "Вентильовані стінки, безпечно для харчових продуктів." },
-  { t: "Складське зберігання", d: "Штабелюються без деформації, витримують сезон за сезоном." },
-  { t: "Міжміська логістика", d: "Посилені кути й дно — вантаж доїжджає цілим." },
-  { t: "Обладнання й деталі", d: "Конструкція під конкретну вагу та габарит." },
-  { t: "Фірмове маркування", d: "Охайний вигляд, можна нанести логотип чи маркування." },
-  { t: "Експорт", d: "Пакет документів на партію, палетне пакування." },
-];
-
-const FAQ = [
-  { q: "Яка мінімальна партія?", a: "Від 5 штук для великих ящиків і від 10 — для малих і середніх. На нестандартні розміри мінімум — 20 штук, бо потрібне окреме налаштування розкрою." },
-  { q: "Скільки чекати замовлення?", a: "Типово 3–7 днів. Великі партії та нестандарт — до 12 днів. Точну дату називаємо на етапі прорахунку й фіксуємо її в домовленості." },
-  { q: "Чи можна зробити ящик під мій розмір?", a: "Так. Надішліть габарити вантажу або креслення — прорахуємо конструкцію, зробимо зразок і тільки після вашого «ок» запускаємо партію." },
-  { q: "Яка деревина використовується?", a: "Хвойні породи камерного сушіння. Контролюємо вологість перед збіркою, тому ящик не веде й не розсихається на складі." },
-  { q: "Ви доставляєте?", a: "Так, по всій Україні. Відвантажуємо на палетах перевізником або власним транспортом — залежно від об'єму та напрямку." },
-  { q: "Як оплатити?", a: "Готівкою або безготівково з ПДВ. Для постійних клієнтів — відтермінування платежу за окремою домовленістю." },
-];
-
-/* ---------- глобальні стилі ---------- */
+/* ---------- глобальні стилі (включно з hover-станами з дизайну) ---------- */
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=Public+Sans:wght@300;400;500;600&display=swap');
-
 * { box-sizing: border-box; }
 body { margin: 0; background: ${C.bg}; }
+a { color: ${C.accent}; text-decoration: none; }
+a:hover { color: oklch(0.45 0.13 45); }
 ::selection { background: oklch(0.88 0.08 45); }
 html { scroll-behavior: smooth; }
-
-.shimmer {
-  background: linear-gradient(100deg, ${C.bgAlt} 30%, oklch(0.975 0.008 85) 50%, ${C.bgAlt} 70%);
-  background-size: 220% 100%;
-  animation: shim 1.6s linear infinite;
-}
-@keyframes shim { from { background-position: 160% 0; } to { background-position: -60% 0; } }
-
-.ph-wrap:hover .ph-img { transform: scale(1.045); }
+section[id] { scroll-margin-top: 84px; }
+@media (max-width: 819px) { section[id] { scroll-margin-top: 128px; } }
 
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-.marquee-track { animation: marquee 38s linear infinite; }
+.marquee-track { animation: marquee 32s linear infinite; }
 
-.lift { transition: transform 420ms cubic-bezier(.16,1,.3,1), box-shadow 420ms cubic-bezier(.16,1,.3,1); }
-.lift:hover { transform: translateY(-6px); box-shadow: 0 16px 44px oklch(0.2 0.01 80 / .09); }
+.lift { transition: box-shadow 240ms ease, transform 240ms ease; }
+.lift:hover { box-shadow: 0 12px 32px oklch(0.2 0.01 80 / 0.08); transform: translateY(-3px); }
 
-.btn { transition: transform 240ms cubic-bezier(.16,1,.3,1), background 240ms, box-shadow 240ms, color 240ms; }
-.btn:hover { transform: translateY(-2px); }
-.btn:active { transform: translateY(0); }
+.h-dark { transition: background 200ms ease; }
+.h-dark:hover { background: ${C.inkHover} !important; color: ${C.onDark} !important; }
+.h-white { transition: background 200ms ease; }
+.h-white:hover { background: oklch(0.975 0.006 84) !important; color: ${C.ink} !important; }
+.h-nav { transition: background 220ms ease, color 220ms ease; }
+.h-nav:hover { background: ${C.chip} !important; color: ${C.ink} !important; }
+.h-lang { transition: background 200ms ease; }
+.h-lang:hover { background: oklch(0.97 0.006 84) !important; }
+.h-arrow { transition: background 200ms ease; }
+.h-arrow:hover { background: oklch(0.94 0.008 84) !important; }
+.h-accent { transition: background 200ms ease; }
+.h-accent:hover { background: ${C.accentDeep} !important; }
+.h-phone { transition: color 200ms ease; }
+.h-phone:hover { color: oklch(0.8 0.1 45) !important; }
+.h-faq:hover .faq-icon { background: oklch(0.93 0.01 85); }
+.h-msg { transition: background 200ms ease, border-color 200ms ease, transform 200ms ease; }
+.h-msg:hover { background: oklch(1 0 0 / 0.14) !important; border-color: var(--brand) !important; color: ${C.onDark} !important; transform: translateY(-1px); }
+.h-foot-msg { transition: transform 200ms ease, box-shadow 200ms ease; }
+.h-foot-msg:hover { transform: translateY(-2px); box-shadow: 0 6px 14px oklch(0.2 0.01 80 / 0.1); }
 
-.nav-a { transition: background 260ms, color 260ms; }
-.nav-a:hover { background: ${C.card}; color: ${C.ink} !important; }
+.noscroll::-webkit-scrollbar { display: none; }
+.noscroll { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 
-input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; }
-input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: ${C.bgAlt}; }
-input[type=range]::-moz-range-track { height: 6px; border-radius: 999px; background: ${C.bgAlt}; }
-input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none; width: 26px; height: 26px; border-radius: 50%;
-  background: ${C.card}; border: 7px solid ${C.accent}; margin-top: -10px; cursor: grab;
-  box-shadow: 0 3px 12px oklch(0.2 0.01 80 / .2); transition: transform 200ms;
-}
-input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.12); }
-input[type=range]::-moz-range-thumb {
-  width: 26px; height: 26px; border-radius: 50%; background: ${C.card};
-  border: 7px solid ${C.accent}; cursor: grab; box-shadow: 0 3px 12px oklch(0.2 0.01 80 / .2);
-}
+input:focus, textarea:focus { outline: none; border-color: ${C.accent} !important; }
 
-.fi { transition: border-color 240ms, box-shadow 240ms; }
-.fi:focus { border-color: ${C.accent}; box-shadow: 0 0 0 4px ${C.accentSoft}; }
-
-a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
-  outline: 2.5px solid ${C.accent}; outline-offset: 3px;
+a:focus-visible, button:focus-visible {
+  outline: 2px solid ${C.accent}; outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -345,122 +403,176 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 }
 `;
 
-/* ---------- базові компоненти ---------- */
+/* ---------- базові стилі ---------- */
 
-function Btn({ children, href, onClick, variant = "dark", size = "md", style, ...rest }) {
-  const pads = { sm: "13px 24px", md: "16px 30px", lg: "19px 36px" };
-  const fs = { sm: 14, md: 15, lg: 16 };
-  const v = {
-    dark: { background: C.ink, color: C.onDark, boxShadow: "none" },
-    accent: { background: C.accent, color: "oklch(0.99 0.005 85)", boxShadow: "0 6px 20px oklch(0.62 0.13 45 / .28)" },
-    white: { background: C.card, color: C.ink, boxShadow: "0 1px 3px oklch(0.2 0.01 80 / .1)" },
-  }[variant];
-  const Tag = href ? "a" : "button";
+const eyebrowStyle = {
+  fontFamily: DISPLAY,
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: "0.18em",
+  textTransform: "uppercase",
+  color: C.accentHead,
+  marginBottom: 18,
+};
+
+const h2Style = {
+  fontFamily: DISPLAY,
+  fontSize: "clamp(30px, 3.2vw, 40px)",
+  lineHeight: 1.08,
+  fontWeight: 700,
+  letterSpacing: "-0.03em",
+  margin: "0 0 12px",
+};
+
+const subStyle = { fontSize: 17, color: C.muted, margin: 0, fontWeight: 300 };
+
+const darkBtn = {
+  display: "inline-block",
+  padding: "12px 22px",
+  borderRadius: 999,
+  background: C.ink,
+  color: C.onDark,
+  fontWeight: 600,
+  fontSize: 14,
+  whiteSpace: "nowrap",
+};
+
+function Title({ children, accent, style }) {
   return (
-    <Tag
-      className="btn"
-      href={href}
-      onClick={onClick}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 10,
-        padding: pads[size],
-        borderRadius: 999,
-        border: "none",
-        fontFamily: BODY,
-        fontWeight: 600,
-        fontSize: fs[size],
-        letterSpacing: "0.01em",
-        textDecoration: "none",
-        cursor: "pointer",
-        ...v,
-        ...style,
-      }}
-      {...rest}
-    >
+    <h2 style={{ ...h2Style, ...style }}>
       {children}
-    </Tag>
+      <br />
+      <span style={{ color: C.accentHead }}>{accent}</span>
+    </h2>
   );
 }
 
-function Eyebrow({ children, dark }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-      <span style={{ width: 6, height: 6, borderRadius: 999, background: C.accent }} />
-      <span
-        style={{
-          fontSize: 13,
-          fontWeight: 600,
-          letterSpacing: "0.04em",
-          color: dark ? C.onDarkSoft : C.accentText,
-        }}
-      >
-        {children}
-      </span>
-    </div>
-  );
-}
-
-function SectionHead({ eyebrow, title, sub, dark, align = "left", max = 640 }) {
-  return (
-    <Reveal style={{ marginBottom: 56, textAlign: align }}>
-      <div style={{ display: "inline-block", textAlign: "left" }}>{eyebrow && <Eyebrow dark={dark}>{eyebrow}</Eyebrow>}</div>
-      <h2
-        style={{
-          fontFamily: DISPLAY,
-          fontSize: "clamp(29px, 4.6vw, 46px)",
-          fontWeight: 700,
-          lineHeight: 1.08,
-          letterSpacing: "-0.03em",
-          margin: 0,
-          color: dark ? C.onDark : C.ink,
-          maxWidth: align === "center" ? "100%" : max,
-        }}
-      >
-        {title}
-      </h2>
-      {sub && (
-        <p
-          style={{
-            fontSize: 17,
-            lineHeight: 1.65,
-            color: dark ? C.onDarkSoft : C.muted,
-            margin: "16px 0 0",
-            marginLeft: align === "center" ? "auto" : 0,
-            marginRight: align === "center" ? "auto" : 0,
-            maxWidth: 540,
-            fontWeight: 300,
-          }}
-        >
-          {sub}
-        </p>
-      )}
-    </Reveal>
-  );
-}
+const section = (extra) => ({ padding: `96px ${PAD_H} 0`, ...extra });
+const wrap = { maxWidth: MAXW, margin: "0 auto" };
 
 /* ============================================================
    СЕКЦІЇ
    ============================================================ */
 
-function Header({ isMobile }) {
-  const [scrolled, setScrolled] = useState(false);
+function useActiveSection() {
+  const [active, setActive] = useState(null);
   useEffect(() => {
-    const on = () => setScrolled(window.scrollY > 16);
-    on();
-    window.addEventListener("scroll", on, { passive: true });
-    return () => window.removeEventListener("scroll", on);
+    const els = Object.keys(SECTION_NAV).map((id) => document.getElementById(id)).filter(Boolean);
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) setActive(SECTION_NAV[e.target.id]);
+        });
+      },
+      // «активна» — та секція, що перетинає смугу трохи вище середини екрана
+      { rootMargin: "-40% 0px -55% 0px" }
+    );
+    els.forEach((el) => io.observe(el));
+    const onTop = () => window.scrollY < 200 && setActive(null);
+    window.addEventListener("scroll", onTop, { passive: true });
+    return () => {
+      io.disconnect();
+      window.removeEventListener("scroll", onTop);
+    };
   }, []);
+  return active;
+}
 
-  const links = [
-    ["#advantages", "Переваги"],
-    ["#catalog", "Каталог"],
-    ["#process", "Як працюємо"],
-    ["#quality", "Якість"],
-    ["#faq", "Питання"],
-  ];
+function Header({ isMobile, isWide }) {
+  const { t, lang, setLang } = useT();
+  const en = lang === "en";
+  const active = useActiveSection();
+  const navRef = useRef(null);
+
+  // На вузьких екранах меню прокручується — тримаємо активний пункт у видимій зоні.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || !active || nav.scrollWidth <= nav.clientWidth + 1) return;
+    const a = nav.querySelector(`[data-key="${active}"]`);
+    if (!a) return;
+    nav.scrollTo({ left: a.offsetLeft - (nav.clientWidth - a.offsetWidth) / 2, behavior: "smooth" });
+  }, [active]);
+
+  // Затухання країв — лише коли меню справді не вміщається й прокручується.
+  const [overflow, setOverflow] = useState(false);
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const check = () => setOverflow(nav.scrollWidth > nav.clientWidth + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(nav);
+    document.fonts?.ready.then(check);
+    return () => ro.disconnect();
+  }, [lang, isMobile, isWide]);
+
+  const navMask = !overflow
+    ? "none"
+    : isMobile
+    ? "linear-gradient(to right, black calc(100% - 26px), transparent 100%)"
+    : "linear-gradient(to right, transparent 0, black 18px, black calc(100% - 18px), transparent 100%)";
+  // Повний номер у кнопці — лише на широких екранах, інакше іконка (звільняє місце для меню).
+  const phoneCompact = isMobile || !isWide;
+
+  // Рамка й фон — на зовнішньому «овалі», прокрутка із затуханням — всередині,
+  // щоб маска не з'їдала край овалу і пункти не виглядали такими, що вилазять за нього.
+  const nav = (
+    <nav
+      style={{
+        display: "flex",
+        padding: 5,
+        borderRadius: 999,
+        background: "oklch(1 0 0 / 0.94)",
+        backdropFilter: "blur(14px)",
+        border: `1px solid ${C.line}`,
+        overflow: "hidden",
+        minWidth: 0,
+        maxWidth: "100%",
+      }}
+    >
+    <div
+      ref={navRef}
+      className="noscroll"
+      style={{
+        display: "flex",
+        flex: "1 1 auto",
+        gap: 2,
+        alignItems: "center",
+        justifyContent: isMobile && !overflow ? "space-between" : "flex-start",
+        borderRadius: 999,
+        overflowX: "auto",
+        minWidth: 0,
+        WebkitMaskImage: navMask,
+        maskImage: navMask,
+      }}
+    >
+      {NAV.map((k) => {
+        const on = active === k;
+        return (
+          <a
+            key={k}
+            data-key={k}
+            href={`#${SECTION_ID[k]}`}
+            className="h-nav"
+            aria-current={on ? "true" : undefined}
+            style={{
+              color: on ? C.ink : C.text2,
+              background: on ? C.chip : "transparent",
+              fontWeight: 500,
+              fontSize: "clamp(13px, 1.05vw, 15px)",
+              padding: "9px clamp(10px, 1vw, 15px)",
+              borderRadius: 999,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            {t.nav[k]}
+          </a>
+        );
+      })}
+    </div>
+    </nav>
+  );
 
   return (
     <header
@@ -468,256 +580,245 @@ function Header({ isMobile }) {
         position: "sticky",
         top: 0,
         zIndex: 60,
-        padding: isMobile ? "14px 20px" : "20px 40px",
-        background: scrolled ? "oklch(0.985 0.006 85 / 0.82)" : "transparent",
-        backdropFilter: scrolled ? "blur(14px)" : "none",
-        transition: "background 400ms",
+        padding: `16px ${PAD_H}`,
+        background: "oklch(0.982 0.007 84 / 0.9)",
+        backdropFilter: "blur(14px)",
+        WebkitBackdropFilter: "blur(14px)",
       }}
     >
-      <div
-        style={{
-          maxWidth: 1400,
-          margin: "0 auto",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 32,
-        }}
-      >
-        <a href="#top" style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none" }}>
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 10,
-              background: C.ink,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="2" y="6" width="20" height="14" rx="1.5" fill="none" stroke={C.onDark} strokeWidth="2" />
-              <path d="M2 11h20" stroke={C.onDark} strokeWidth="1.8" />
-            </svg>
+      <div style={{ maxWidth: 1440, margin: "0 auto" }}>
+        <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <a href="#top" style={{ display: "flex", alignItems: "center", gap: 10, flex: "0 0 auto", minWidth: 0, color: C.ink }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: C.ink, flexShrink: 0 }} />
+            <span style={{ fontFamily: DISPLAY, fontWeight: 700, fontSize: "clamp(16px, 1.5vw, 19px)", letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>
+              {t.company}
+            </span>
+          </a>
+
+          {!isMobile && <div style={{ flex: "0 1 auto", minWidth: 0, margin: "0 auto", display: "flex" }}>{nav}</div>}
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "0 0 auto" }}>
+            <a
+              {...phoneProps(t)}
+              className="h-dark"
+              aria-label={phoneCompact ? `${t.callAria} ${PHONE_TEXT}` : undefined}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                height: 46,
+                width: phoneCompact ? 46 : "auto",
+                padding: phoneCompact ? 0 : "0 clamp(14px, 1.6vw, 22px)",
+                borderRadius: 999,
+                background: C.ink,
+                color: C.onDark,
+                fontWeight: 600,
+                fontSize: "clamp(13px, 1.2vw, 15px)",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0 }}>
+                <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z" />
+              </svg>
+              {!phoneCompact && <span>{PHONE_TEXT}</span>}
+            </a>
+
+            <button
+              onClick={() => setLang(en ? "uk" : "en")}
+              aria-label={t.langLabel}
+              className="h-lang"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                height: 46,
+                width: isMobile ? 46 : "auto",
+                padding: isMobile ? 0 : "0 16px",
+                borderRadius: 999,
+                border: `1px solid ${C.line}`,
+                background: C.card,
+                cursor: "pointer",
+                fontFamily: DISPLAY,
+                fontSize: 13,
+                fontWeight: 600,
+                color: "oklch(0.3 0.01 80)",
+                flexShrink: 0,
+              }}
+            >
+              {isMobile ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M3 12h18" />
+                  <path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z" />
+                </svg>
+              ) : (
+                <>
+                  <span style={{ color: en ? "oklch(0.62 0.01 84)" : C.ink, transition: "color 200ms ease" }}>UA</span>
+                  <span style={{ color: "oklch(0.82 0.01 84)" }}>/</span>
+                  <span style={{ color: en ? C.ink : "oklch(0.62 0.01 84)", transition: "color 200ms ease" }}>EN</span>
+                </>
+              )}
+            </button>
           </div>
-          <span
-            style={{
-              fontFamily: DISPLAY,
-              fontWeight: 700,
-              fontSize: 18,
-              letterSpacing: "-0.01em",
-              color: C.ink,
-            }}
-          >
-            {COMPANY_NAME}
-          </span>
-        </a>
+        </div>
 
-        {!isMobile && (
-          <nav
-            style={{
-              display: "flex",
-              gap: 4,
-              alignItems: "center",
-              padding: 6,
-              borderRadius: 999,
-              background: C.bgAlt,
-            }}
-          >
-            {links.map(([h, t]) => (
-              <a
-                key={h}
-                href={h}
-                className="nav-a"
-                style={{
-                  color: "oklch(0.35 0.01 80)",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  padding: "10px 18px",
-                  borderRadius: 999,
-                  textDecoration: "none",
-                }}
-              >
-                {t}
-              </a>
-            ))}
-          </nav>
-        )}
-
-        <Btn href={PHONE_HREF} size="sm" variant="dark" style={{ whiteSpace: "nowrap" }}>
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: C.green,
-              boxShadow: `0 0 0 3px oklch(0.72 0.15 145 / .25)`,
-            }}
-          />
-          {isMobile ? "Дзвінок" : PHONE_TEXT}
-        </Btn>
+        {/* На мобільному в один рядок з лого nav не вміщається — переносимо його окремим рядком */}
+        {isMobile && <div style={{ marginTop: 12 }}>{nav}</div>}
       </div>
     </header>
   );
 }
 
-function Hero({ isMobile, variant }) {
+function Check({ children }) {
   return (
-    <section id="top" style={{ padding: isMobile ? "40px 20px 60px" : "80px 40px 110px" }}>
-      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+      <span
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: "50%",
+          background: "oklch(0.93 0.05 45)",
+          color: "oklch(0.5 0.13 45)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 12,
+          flexShrink: 0,
+        }}
+      >
+        ✓
+      </span>
+      <span style={{ fontSize: 15, color: C.lead }}>{children}</span>
+    </div>
+  );
+}
+
+function Hero({ isMobile }) {
+  const { t } = useT();
+  const h = t.hero;
+  return (
+    <section
+      id="top"
+      style={{
+        padding: `0 ${PAD_H}`,
+        minHeight: isMobile ? "calc(100svh - 136px)" : "calc(100vh - 78px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+      }}
+    >
+      <div style={{ maxWidth: 820, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 0 64px" }}>
         <Reveal
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: 10,
-            padding: "8px 16px 8px 10px",
+            gap: 8,
+            padding: "6px 14px 6px 8px",
             borderRadius: 999,
             background: C.card,
-            boxShadow: "0 1px 3px oklch(0.2 0.01 80 / .06)",
+            boxShadow: "0 1px 3px oklch(0.2 0.01 80 / 0.06)",
             fontSize: 13,
             color: "oklch(0.4 0.01 80)",
-            marginBottom: isMobile ? 26 : 40,
+            marginBottom: 28,
           }}
         >
-          <span
-            style={{
-              padding: "3px 10px",
-              borderRadius: 999,
-              background: C.accentSoft,
-              color: C.accentText,
-              fontWeight: 600,
-              fontSize: 12,
-            }}
-          >
-            Своє виробництво
+          <span style={{ padding: "3px 9px", borderRadius: 999, background: C.accentSoft, color: C.accentText, fontWeight: 600, fontSize: 12, whiteSpace: "nowrap" }}>
+            {h.badge}
           </span>
-          Сушіння, розкрій і збірка — на одній ділянці
+          {h.badgeText}
         </Reveal>
 
-        <Reveal delay={60}>
-          <h1
-            style={{
-              fontFamily: DISPLAY,
-              fontSize: "clamp(38px, 7.6vw, 84px)",
-              lineHeight: 1.02,
-              fontWeight: 700,
-              letterSpacing: "-0.035em",
-              margin: "0 0 36px",
-              maxWidth: 1000,
-              color: C.ink,
-            }}
-          >
-            Ящики, на яких
-            <br />
-            тримається ваша
-            <br />
-            <span style={{ color: C.accent }}>логістика</span>
-          </h1>
-        </Reveal>
-
-        <div
+        <Reveal
+          as="h1"
+          delay={60}
           style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1fr auto",
-            gap: isMobile ? 28 : 64,
-            alignItems: "end",
+            fontFamily: DISPLAY,
+            fontSize: "clamp(40px, 5vw, 62px)",
+            lineHeight: 1.05,
+            fontWeight: 700,
+            letterSpacing: "-0.035em",
+            margin: "0 0 24px",
+            maxWidth: 780,
+            textWrap: "pretty",
           }}
         >
-          <Reveal delay={120}>
-            <p
-              style={{
-                fontSize: isMobile ? 17 : 20,
-                lineHeight: 1.6,
-                color: "oklch(0.42 0.01 80)",
-                maxWidth: 560,
-                margin: 0,
-                fontWeight: 300,
-              }}
-            >
-              Виробництво дерев'яних ящиків для транспортування, зберігання та пакування.
-              Стабільна якість, ціни від виробника, доставка по всій Україні.
-            </p>
-          </Reveal>
-          <Reveal delay={180} style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Btn href="#catalog" variant="accent" size={isMobile ? "md" : "lg"}>
-              Обрати ящик
-            </Btn>
-            <Btn
-              href={variant.contact === "form" ? "#contact" : PHONE_HREF}
-              variant="white"
-              size={isMobile ? "md" : "lg"}
-            >
-              {variant.contact === "form" ? "Залишити заявку" : PHONE_TEXT}
-            </Btn>
-          </Reveal>
-        </div>
-
-        <Reveal delay={140} y={40} style={{ marginTop: isMobile ? 44 : 96, position: "relative" }}>
-          <Photo
-            id={IMG.warehouse}
-            alt="Стос дерев'яних ящиків на виробництві"
-            w={1900}
-            ratio={isMobile ? "4 / 3" : "21 / 9"}
-            radius={isMobile ? 20 : 32}
-          />
-          <div
-            style={{
-              position: "absolute",
-              left: isMobile ? 16 : 28,
-              bottom: isMobile ? 16 : 28,
-              background: "oklch(1 0 0 / .92)",
-              backdropFilter: "blur(10px)",
-              borderRadius: 999,
-              padding: isMobile ? "10px 18px" : "14px 24px",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              boxShadow: "0 8px 30px oklch(0.2 0.01 80 / .14)",
-            }}
-          >
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 999,
-                background: C.green,
-                boxShadow: `0 0 0 4px oklch(0.72 0.15 145 / .2)`,
-              }}
-            />
-            <span style={{ fontSize: isMobile ? 13 : 14.5, fontWeight: 500, color: C.ink }}>
-              Виготовляємо за 3–7 днів
-            </span>
-          </div>
+          {h.titlePre}
+          <span style={{ color: C.accent }}>{h.titleAccent}</span>
+          {h.titlePost}
         </Reveal>
 
+        <Reveal as="p" delay={110} style={{ fontSize: 18, lineHeight: 1.6, color: C.lead, maxWidth: 560, margin: "0 0 36px", fontWeight: 300 }}>
+          {h.lead}
+        </Reveal>
+
+        <Reveal delay={160} style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+          <a href="#catalog" className="h-dark" style={{ padding: "15px 28px", borderRadius: 999, background: C.ink, color: C.onDark, fontWeight: 600, fontSize: 15, whiteSpace: "nowrap" }}>
+            {h.ctaCatalog}
+          </a>
+          <a href="#order" className="h-white" style={{ padding: "15px 28px", borderRadius: 999, background: C.card, color: C.ink, fontWeight: 600, fontSize: 15, whiteSpace: "nowrap", border: `1px solid ${C.line}` }}>
+            {h.ctaQuote}
+          </a>
+        </Reveal>
+
+        <Reveal delay={210} style={{ display: "flex", alignItems: "center", gap: 18, rowGap: 12, flexWrap: "wrap", justifyContent: "center", marginTop: 28 }}>
+          {h.checks.map((c, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && !isMobile && <span style={{ width: 5, height: 5, borderRadius: "50%", background: "oklch(0.88 0.01 82)" }} />}
+              <Check>{c}</Check>
+            </React.Fragment>
+          ))}
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+function PhotoStats({ isMobile }) {
+  const { t } = useT();
+  const s = t.stats;
+  const stats = [
+    { v: 10, s: "+" },
+    { v: 50000, s: "" },
+    { v: 120, s: "+" },
+    { text: s.lead },
+  ];
+  return (
+    <section style={{ padding: `0 max(28px, ${PAD_H}) 72px` }}>
+      <div
+        style={{
+          maxWidth: MAXW,
+          width: "100%",
+          margin: "0 auto",
+          display: "grid",
+          gridTemplateColumns: isMobile ? "minmax(0, 1.3fr) minmax(0, 1fr)" : "minmax(0, 1fr)",
+          gap: 24,
+          alignItems: isMobile ? "center" : "stretch",
+        }}
+      >
+        <Reveal style={{ alignSelf: "stretch" }}>
+          <Photo id={IMG.warehouse} alt={s.photoAlt} radius={24} style={{ height: "100%", minHeight: isMobile ? 260 : 460 }} />
+        </Reveal>
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)",
-            gap: isMobile ? 26 : 40,
-            marginTop: isMobile ? 36 : 48,
+            alignSelf: "center",
+            display: "flex",
+            flexDirection: isMobile ? "column" : "row",
+            justifyContent: isMobile ? "center" : "space-between",
+            gap: 20,
+            flexWrap: "wrap",
+            padding: isMobile ? 0 : "0 clamp(0px, 4vw, 72px)",
           }}
         >
-          {[
-            { v: 10, s: "+", l: "років на ринку" },
-            { v: 50000, s: "", l: "ящиків на місяць" },
-            { v: 120, s: "+", l: "постійних клієнтів" },
-            { v: 7, s: " днів", l: "типовий термін" },
-          ].map((x, i) => (
-            <Reveal key={x.l} delay={i * 90}>
-              <div
-                style={{
-                  fontFamily: DISPLAY,
-                  fontSize: isMobile ? 26 : 32,
-                  fontWeight: 700,
-                  letterSpacing: "-0.02em",
-                  color: C.ink,
-                }}
-              >
-                <CountUp to={x.v} suffix={x.s} />
+          {stats.map((x, i) => (
+            <Reveal key={i} delay={i * 70}>
+              <div style={{ fontFamily: DISPLAY, fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>
+                {x.text ?? <CountUp to={x.v} suffix={x.s} />}
               </div>
-              <div style={{ fontSize: 14, color: C.muted, marginTop: 6 }}>{x.l}</div>
+              <div style={{ fontSize: 15, color: C.muted, marginTop: 6 }}>{s.items[i]}</div>
             </Reveal>
           ))}
         </div>
@@ -727,340 +828,352 @@ function Hero({ isMobile, variant }) {
 }
 
 function Marquee() {
-  const items = [...INDUSTRIES, ...INDUSTRIES];
+  const { t } = useT();
+  const list = t.industries;
+  const items = [...list, ...list];
   return (
-    <section
-      style={{ overflow: "hidden", padding: "26px 0", background: C.card }}
-      aria-label="Галузі, для яких ми виробляємо"
-    >
+    <div style={{ background: C.card, padding: "18px 0", overflow: "hidden", position: "relative" }} aria-label={t.marqueeAria}>
       <div className="marquee-track" style={{ display: "flex", width: "max-content" }}>
-        {items.map((t, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 30, paddingRight: 30 }}>
-            <span
-              style={{
-                fontFamily: DISPLAY,
-                fontSize: 19,
-                fontWeight: 600,
-                letterSpacing: "-0.02em",
-                color: "oklch(0.42 0.01 80)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {t}
-            </span>
-            <span style={{ width: 6, height: 6, borderRadius: 999, background: C.accent, flexShrink: 0 }} />
+        {items.map((label, i) => (
+          <div key={i} aria-hidden={i >= list.length} style={{ display: "flex", alignItems: "center", gap: 32, padding: "0 16px" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.accent, flexShrink: 0 }} />
+            <span style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: "oklch(0.28 0.01 80)", whiteSpace: "nowrap" }}>{label}</span>
           </div>
         ))}
       </div>
-    </section>
+    </div>
   );
 }
 
 function Advantages({ isMobile }) {
-  const items = [
-    {
-      t: "Якість матеріалу",
-      d: "Хвойна деревина камерного сушіння. Контроль вологості та міцності на кожному етапі — ящик не розсипається на другому рейсі.",
-      shape: { width: 18, height: 18, borderRadius: 5 },
-    },
-    {
-      t: "Будь-які об'єми",
-      d: "Від десяти штук до регулярних вагонних поставок. Разові замовлення та довгострокові контракти з фіксованим графіком.",
-      shape: { width: 18, height: 18, borderRadius: "50%" },
-    },
-    {
-      t: "Чіткі терміни",
-      d: "Узгоджуємо дату відвантаження на старті й тримаємо її. Власне виробництво — без черг у підрядників.",
-      shape: { width: 18, height: 4, borderRadius: 2 },
-    },
-  ];
+  const { t } = useT();
+  const a = t.advantages;
   return (
-    <section id="advantages" style={{ padding: isMobile ? "70px 20px" : "110px 40px" }}>
-      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        <SectionHead
-          eyebrow="Чому з нами працюють роками"
-          title="Три речі, які важливіші за все інше"
-          sub="Клієнти повертаються не через знижку, а через передбачуваність. Ось на чому вона тримається."
-        />
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 24 }}>
-          {items.map((x, i) => (
-            <Reveal
-              key={x.t}
-              delay={i * 120}
-              className="lift"
-              style={{
-                background: C.card,
-                borderRadius: 28,
-                padding: isMobile ? "32px 28px" : 44,
-                minHeight: isMobile ? "auto" : 300,
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-                gap: 34,
-              }}
-            >
+    <section id="advantages" style={section()}>
+      <div style={wrap}>
+        <Reveal style={eyebrowStyle}>{a.eyebrow}</Reveal>
+        <Title accent={a.accent}>{a.title}</Title>
+        <Reveal as="p" style={{ ...subStyle, margin: "0 0 40px", maxWidth: 520 }}>
+          {a.sub}
+        </Reveal>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "repeat(3, minmax(0, 1fr))", gap: 16 }}>
+          {a.items.map((x, i) => (
+            <Reveal key={i} delay={i * 80}>
               <div
+                className="lift"
                 style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 14,
-                  background: C.bgAlt,
+                  height: "100%",
+                  background: C.card,
+                  borderRadius: 20,
+                  padding: "28px 30px",
+                  border: `1px solid ${C.line}`,
                   display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
+                  flexDirection: "column",
+                  gap: 14,
                 }}
               >
-                <div style={{ background: C.accent, ...x.shape }} />
-              </div>
-              <div>
-                <h3
-                  style={{
-                    fontFamily: DISPLAY,
-                    fontSize: 24,
-                    fontWeight: 600,
-                    letterSpacing: "-0.02em",
-                    margin: "0 0 12px",
-                    color: C.ink,
-                  }}
-                >
-                  {x.t}
-                </h3>
-                <p style={{ fontSize: 15, lineHeight: 1.65, color: C.body, margin: 0, fontWeight: 300 }}>{x.d}</p>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: "oklch(0.955 0.008 85)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <div style={{ ...ADV_SHAPES[i], background: C.accent }} />
+                  </div>
+                  <h3 style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em", margin: 0 }}>{x.t}</h3>
+                </div>
+                <p style={{ fontSize: 16, lineHeight: 1.65, color: C.body, margin: 0, fontWeight: 300 }}>{x.d}</p>
               </div>
             </Reveal>
           ))}
         </div>
       </div>
     </section>
+  );
+}
+
+function CatalogTabs({ idx, go, products }) {
+  const ref = useRef(null);
+  const [m, setM] = useState({ frac: 1, ratio: 0 });
+
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el || !el.scrollWidth) return;
+    const frac = el.clientWidth / el.scrollWidth;
+    const max = el.scrollWidth - el.clientWidth;
+    const ratio = max > 0 ? el.scrollLeft / max : 0;
+    setM((p) => (Math.abs(p.frac - frac) > 0.005 || Math.abs(p.ratio - ratio) > 0.005 ? { frac, ratio } : p));
+  }, []);
+
+  useLayoutEffect(() => {
+    measure();
+    const t1 = setTimeout(measure, 60);
+    const t2 = setTimeout(measure, 400);
+    window.addEventListener("resize", measure);
+    if (document.fonts?.ready) document.fonts.ready.then(measure);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener("resize", measure);
+    };
+  }, [measure]);
+
+  // Підписи табів різної довжини в різних мовах — перемірюємо після зміни мови.
+  useLayoutEffect(() => {
+    measure();
+  }, [products, measure]);
+
+  // Активний таб завжди тримаємо у видимій зоні.
+  useEffect(() => {
+    const el = ref.current;
+    const btn = el?.children[idx];
+    if (!el || !btn || m.frac >= 0.97) return;
+    const left = btn.offsetLeft - (el.clientWidth - btn.offsetWidth) / 2;
+    el.scrollTo({ left, behavior: "smooth" });
+  }, [idx, m.frac]);
+
+  const fits = m.frac >= 0.97;
+  const fadeL = fits ? 0 : Math.min(1, Math.max(0, m.ratio / 0.12));
+  const fadeR = fits ? 0 : Math.min(1, Math.max(0, (1 - m.ratio) / 0.12));
+
+  const seekTo = (track, clientX) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = track.getBoundingClientRect();
+    const p = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    el.scrollLeft = p * (el.scrollWidth - el.clientWidth);
+    measure();
+  };
+
+  const onTrackDown = (e) => {
+    const track = e.currentTarget;
+    e.preventDefault();
+    document.body.style.userSelect = "none";
+    seekTo(track, e.clientX);
+    const move = (ev) => {
+      if (ev.buttons === 0) return up();
+      ev.preventDefault();
+      seekTo(track, ev.clientX);
+    };
+    const up = () => {
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      window.removeEventListener("blur", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    window.addEventListener("blur", up);
+  };
+
+  const fade = (dir, op) => ({
+    opacity: op,
+    transition: "opacity 260ms ease",
+    position: "absolute",
+    top: -2,
+    bottom: 2,
+    [dir]: 0,
+    width: 24,
+    pointerEvents: "none",
+    zIndex: 2,
+    background: `linear-gradient(${dir === "left" ? 90 : 270}deg, rgba(243,239,231,1), rgba(243,239,231,0))`,
+  });
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ position: "relative" }}>
+        <div style={fade("left", fadeL)} />
+        <div style={fade("right", fadeR)} />
+        <div
+          ref={ref}
+          onScroll={measure}
+          role="tablist"
+          className="noscroll"
+          style={{ display: "flex", flexWrap: "nowrap", gap: 10, overflowX: "auto", padding: "2px 2px 4px" }}
+        >
+          {products.map((p, i) => {
+            const on = i === idx;
+            return (
+              <button
+                key={i}
+                role="tab"
+                aria-selected={on}
+                onClick={() => go(i)}
+                style={{
+                  flex: fits ? "1 1 0" : "0 0 auto",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  border: "none",
+                  cursor: "pointer",
+                  padding: "13px 18px",
+                  borderRadius: 16,
+                  textAlign: "left",
+                  whiteSpace: "nowrap",
+                  fontFamily: DISPLAY,
+                  transition: "background 260ms ease, color 260ms ease, box-shadow 260ms ease",
+                  background: on ? C.ink : C.card,
+                  color: on ? C.onDark : C.text2,
+                  boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}`,
+                }}
+              >
+                <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.tab}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {!fits && (
+        <div
+          onPointerDown={onTrackDown}
+          style={{ marginTop: 8, height: 10, padding: "3px 0", cursor: "pointer", borderRadius: 999, background: "oklch(0.9 0.009 84)", overflow: "hidden", touchAction: "none" }}
+        >
+          <div
+            style={{
+              height: "100%",
+              borderRadius: 999,
+              background: C.accent,
+              width: `${Math.round(m.frac * 100)}%`,
+              transform: `translateX(${Math.round(m.ratio * (100 / Math.max(m.frac, 0.01) - 100))}%)`,
+            }}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
 function Catalog({ isMobile }) {
-  const [idx, setIdx] = useState(1);
-  const p = PRODUCTS[idx];
+  const { t } = useT();
+  const c = t.catalog;
+  const products = c.products;
+  const [idx, setIdx] = useState(0);
+  const touchX = useRef(null);
+  const n = products.length;
+  const go = useCallback((next) => setIdx(((next % n) + n) % n), [n]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "ArrowRight") go(idx + 1);
+      if (e.key === "ArrowLeft") go(idx - 1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [idx, go]);
+
+  const onTouchStart = (e) => { touchX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e) => {
+    if (touchX.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchX.current;
+    if (Math.abs(dx) > 45) go(idx + (dx < 0 ? 1 : -1));
+    touchX.current = null;
+  };
+
+  const arrowBtn = (dir, label) => (
+    <button
+      onClick={() => go(idx + dir)}
+      aria-label={label}
+      className="h-arrow"
+      style={{
+        width: 38,
+        height: 38,
+        borderRadius: "50%",
+        border: "none",
+        background: "transparent",
+        cursor: "pointer",
+        padding: 0,
+        color: "oklch(0.25 0.01 80)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
+        <path d={dir < 0 ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6"} />
+      </svg>
+    </button>
+  );
 
   return (
-    <section id="catalog" style={{ padding: isMobile ? "0 20px 70px" : "0 40px 110px" }}>
-      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        <SectionHead
-          eyebrow="Каталог"
-          title="Оберіть формат ящика"
-          sub="Ціни орієнтовні й залежать від об'єму партії та розміру. Точний розрахунок називаємо за телефоном."
-        />
+    <section id="catalog" style={{ marginTop: 96, padding: `88px ${PAD_H}`, background: C.bgAlt }}>
+      <div style={wrap}>
+        <Reveal style={{ marginBottom: 24 }}>
+          <div style={eyebrowStyle}>{c.eyebrow}</div>
+          <Title accent={c.accent}>{c.title}</Title>
+          <p style={{ ...subStyle, maxWidth: 560 }}>{c.sub}</p>
+        </Reveal>
 
-        {/* Селектор — тільки назви. На мобільному: акуратна сітка 2×2, без горизонтального скролу. */}
-        <Reveal>
-          <div
-            role="tablist"
-            aria-label="Типи ящиків"
-            style={{
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)",
-              gap: isMobile ? 10 : 14,
-              marginBottom: 24,
-            }}
-          >
-            {PRODUCTS.map((x, i) => {
-              const on = i === idx;
-              return (
-                <button
-                  key={x.id}
-                  role="tab"
-                  aria-selected={on}
-                  onClick={() => setIdx(i)}
-                  className="btn"
+        <CatalogTabs idx={idx} go={go} products={products} />
+
+        <Reveal style={{ position: "relative", border: `1px solid ${C.line}`, borderRadius: 24, overflow: "hidden", background: C.card }}>
+          <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ overflow: "hidden" }}>
+            <div style={{ display: "flex", width: "100%", transition: "transform 560ms cubic-bezier(0.4, 0, 0.15, 1)", transform: `translateX(-${idx * 100}%)` }}>
+              {products.map((p, i) => (
+                <article
+                  key={i}
+                  aria-hidden={i !== idx}
                   style={{
-                    textAlign: "left",
-                    cursor: "pointer",
-                    border: "none",
-                    padding: isMobile ? "10px 12px 10px 10px" : 14,
-                    borderRadius: isMobile ? 18 : 24,
-                    background: on ? C.ink : C.card,
-                    color: on ? C.onDark : C.ink,
-                    boxShadow: on
-                      ? "0 14px 38px oklch(0.2 0.01 80 / .22)"
-                      : "0 1px 3px oklch(0.2 0.01 80 / .07)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: isMobile ? 10 : 16,
-                    fontFamily: BODY,
-                    minWidth: 0,
+                    minWidth: "100%",
+                    display: "grid",
+                    gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 0.9fr) minmax(0, 1.1fr)",
+                    alignItems: "stretch",
                   }}
                 >
-                  <div style={{ flexShrink: 0 }}>
-                    <Photo
-                      id={x.photo}
-                      alt={x.alt}
-                      w={220}
-                      h={220}
-                      radius={isMobile ? 12 : 16}
-                      zoom={false}
-                      style={{ width: isMobile ? 42 : 58, height: isMobile ? 42 : 58 }}
-                    />
+                  <div style={{ position: "relative", minWidth: 0, minHeight: 240 }}>
+                    <Photo id={PRODUCT_PHOTOS[i]} alt={p.alt} style={{ position: "absolute", inset: 0 }} />
                   </div>
-                  <span
-                    style={{
-                      fontFamily: DISPLAY,
-                      fontSize: isMobile ? 14.5 : 18,
-                      fontWeight: 600,
-                      letterSpacing: "-0.02em",
-                      lineHeight: 1.2,
-                      minWidth: 0,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: isMobile ? "nowrap" : "normal",
-                    }}
-                  >
-                    {x.name}
-                  </span>
-                </button>
-              );
-            })}
+                  <div style={{ minWidth: 0, padding: isMobile ? "28px 24px" : 36, display: "flex", flexDirection: "column", justifyContent: "flex-start" }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: C.accent, marginBottom: 12 }}>{p.note}</span>
+                    <h3 style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 700, letterSpacing: "-0.03em", margin: "0 0 10px" }}>{p.name}</h3>
+                    <p style={{ fontSize: 17, lineHeight: 1.65, color: C.body, margin: "0 0 24px", fontWeight: 300, maxWidth: 480 }}>{p.desc}</p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 26 }}>
+                      {p.tags.map((tg) => (
+                        <span key={tg} style={{ padding: "8px 14px", borderRadius: 999, background: C.chip, fontSize: 14, color: C.text2 }}>{tg}</span>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? "16px 28px" : 32, marginBottom: 18 }}>
+                      {p.stats.map(([k, v]) => (
+                        <div key={k} style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 16 }}>
+                          <span style={{ color: C.soft, fontWeight: 300, fontSize: 14 }}>{k}</span>
+                          <span style={{ fontFamily: DISPLAY, fontWeight: 600 }}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ position: "relative", marginTop: "auto", display: "flex", alignItems: "center", gap: 20, paddingTop: 20, borderTop: `1px solid ${C.lineSoft}`, flexWrap: "wrap" }}>
+                      <div style={{ fontFamily: DISPLAY, fontSize: 23, fontWeight: 700, letterSpacing: "-0.03em", whiteSpace: "nowrap", flexShrink: 0 }}>
+                        {p.price}
+                        {p.priceSuffix && <span style={{ fontSize: 14, fontWeight: 400, color: C.soft }}> {p.priceSuffix}</span>}
+                      </div>
+                      <a href="#order" tabIndex={i === idx ? 0 : -1} className="h-dark" style={{ ...darkBtn, marginLeft: "auto" }}>{p.cta}</a>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
           </div>
-        </Reveal>
 
-        {/* Панель товару */}
-        <Reveal delay={80}>
+          {/* Стрілки — один блок поверх слайдів, не їде разом із фото.
+              Десктоп: лівий нижній кут фото-колонки. Мобільний: правий верхній кут фото. */}
           <div
             style={{
-              borderRadius: isMobile ? 24 : 36,
-              overflow: "hidden",
-              background: C.card,
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) minmax(0,1fr)",
+              position: "absolute",
+              ...(isMobile ? { top: 16, right: 16 } : { left: 32, bottom: 32 }),
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              padding: 4,
+              borderRadius: 999,
+              background: "oklch(1 0 0 / 0.96)",
+              backdropFilter: "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
+              border: `1px solid ${C.line}`,
+              boxShadow: "0 4px 16px oklch(0.2 0.01 80 / 0.08)",
+              zIndex: 3,
             }}
           >
-            <div style={{ position: "relative", minHeight: isMobile ? 240 : 520 }}>
-              <Photo
-                id={p.photo}
-                alt={p.alt}
-                w={1200}
-                style={{ position: "absolute", inset: 0, height: "100%" }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  left: 20,
-                  top: 20,
-                  background: "oklch(1 0 0 / .9)",
-                  backdropFilter: "blur(8px)",
-                  borderRadius: 999,
-                  padding: "8px 16px",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: C.ink,
-                }}
-              >
-                Термін виготовлення: {p.lead}
-              </div>
-            </div>
-
-            <div
-              style={{
-                padding: isMobile ? "30px 24px" : "52px 56px",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  color: C.accent,
-                  marginBottom: 18,
-                }}
-              >
-                Дерево · {p.note}
-              </div>
-              <h3
-                style={{
-                  fontFamily: DISPLAY,
-                  fontSize: isMobile ? 30 : 40,
-                  fontWeight: 700,
-                  letterSpacing: "-0.03em",
-                  margin: "0 0 18px",
-                  color: C.ink,
-                }}
-              >
-                {p.name}
-              </h3>
-              <p
-                style={{
-                  fontSize: 16.5,
-                  lineHeight: 1.65,
-                  color: C.body,
-                  margin: "0 0 26px",
-                  fontWeight: 300,
-                  maxWidth: 440,
-                }}
-              >
-                {p.desc}
-              </p>
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 30 }}>
-                {p.fits.map((f) => (
-                  <span
-                    key={f}
-                    style={{
-                      fontSize: 13,
-                      padding: "7px 14px",
-                      borderRadius: 999,
-                      background: C.bgAlt,
-                      color: "oklch(0.4 0.01 80)",
-                    }}
-                  >
-                    {f}
-                  </span>
-                ))}
-              </div>
-
-              <div style={{ display: "flex", gap: 40, marginBottom: 34, flexWrap: "wrap" }}>
-                {[
-                  ["Розмір", p.size],
-                  ["Навантаження", p.load],
-                  ["Мін. партія", `${p.min} шт`],
-                ].map(([k, v]) => (
-                  <div key={k}>
-                    <div style={{ fontSize: 13, color: C.soft, marginBottom: 4 }}>{k}</div>
-                    <div style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: C.ink }}>{v}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-end",
-                  gap: 24,
-                  flexWrap: "wrap",
-                  paddingTop: 30,
-                  borderTop: `1px solid ${C.line}`,
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 13, color: C.soft }}>Ціна</div>
-                  <div
-                    style={{
-                      fontFamily: DISPLAY,
-                      fontSize: isMobile ? 34 : 40,
-                      fontWeight: 700,
-                      letterSpacing: "-0.03em",
-                      color: C.ink,
-                      lineHeight: 1.15,
-                    }}
-                  >
-                    від {p.price} ₴
-                    <span style={{ fontSize: 16, fontWeight: 400, color: C.soft }}> / шт</span>
-                  </div>
-                </div>
-                <Btn href="#contact" variant="accent" style={{ marginLeft: isMobile ? 0 : "auto" }}>
-                  Дізнатись деталі
-                </Btn>
-              </div>
-            </div>
+            {arrowBtn(-1, c.prev)}
+            <span style={{ width: 1, height: 18, background: "oklch(0.93 0.008 84)" }} />
+            {arrowBtn(1, c.next)}
           </div>
         </Reveal>
       </div>
@@ -1068,919 +1181,553 @@ function Catalog({ isMobile }) {
   );
 }
 
-
-function Process({ isMobile }) {
+function FaqItem({ q, a, on, onToggle }) {
   return (
-    <section id="process" style={{ padding: isMobile ? "0 20px 70px" : "0 40px 110px" }}>
-      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        <SectionHead
-          eyebrow="Порядок роботи"
-          title="Від дзвінка до відвантаження"
-          sub="Чотири кроки без сюрпризів. Дата, яку називаємо на другому кроці, — та сама, яку бачите на четвертому."
-        />
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)", gap: 20 }}>
-          {STEPS.map((s, i) => (
-            <Reveal
-              key={s.t}
-              delay={i * 110}
-              className="lift"
+    <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: "18px 22px" }}>
+      <button
+        onClick={onToggle}
+        aria-expanded={on}
+        className="h-faq"
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          background: "none",
+          border: "none",
+          padding: 0,
+          cursor: "pointer",
+          textAlign: "left",
+          fontFamily: DISPLAY,
+          fontSize: 16,
+          fontWeight: 600,
+          color: on ? "oklch(0.55 0.13 45)" : C.ink,
+          transition: "color 300ms ease",
+        }}
+      >
+        <span style={{ flex: 1 }}>{q}</span>
+        {/* Один «+», який повертається на 45° і стає «×» */}
+        <span
+          className="faq-icon"
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: "50%",
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: `background 300ms ease, color 300ms ease, transform 460ms ${EASE_OUT}`,
+            transform: on ? "rotate(45deg)" : "none",
+            background: on ? C.accent : "oklch(0.96 0.008 85)",
+            color: on ? "oklch(0.99 0.005 85)" : "oklch(0.4 0.01 80)",
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ display: "block" }}>
+            <path d="M6 1v10M1 6h10" />
+          </svg>
+        </span>
+      </button>
+      {/* grid-template-rows 0fr → 1fr анімує реальну висоту відповіді, тож немає «доїзду» до фіксованого max-height і різкої зупинки */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateRows: on ? "1fr" : "0fr",
+          transition: `grid-template-rows 460ms ${EASE_OUT}`,
+        }}
+      >
+        <div style={{ overflow: "hidden", minHeight: 0 }}>
+          <p
+            style={{
+              fontSize: 15,
+              lineHeight: 1.65,
+              color: C.body,
+              fontWeight: 300,
+              margin: "14px 0 4px",
+              opacity: on ? 1 : 0,
+              transform: on ? "none" : "translateY(-6px)",
+              transition: on
+                ? `opacity 360ms ease 80ms, transform 460ms ${EASE_OUT} 40ms`
+                : "opacity 200ms ease, transform 300ms ease",
+            }}
+          >
+            {a}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Faq({ isMobile }) {
+  const { t } = useT();
+  const f = t.faq;
+  const [open, setOpen] = useState(0);
+  return (
+    <section id="faq" style={section()}>
+      <div style={wrap}>
+        <Reveal style={eyebrowStyle}>{f.eyebrow}</Reveal>
+        <Title accent={f.accent} style={{ marginBottom: 28 }}>{f.title}</Title>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1.15fr) minmax(0, 0.85fr)", gap: 24, alignItems: "stretch" }}>
+          <Reveal style={{ display: "grid", gap: 10, alignContent: "start" }}>
+            {f.items.map((item, i) => (
+              <FaqItem key={i} q={item.q} a={item.a} on={open === i} onToggle={() => setOpen(open === i ? -1 : i)} />
+            ))}
+            <div
               style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 18,
                 background: C.card,
-                borderRadius: 28,
-                padding: isMobile ? "28px 26px" : "36px 32px",
-                position: "relative",
+                border: `1px solid ${C.accent}`,
+                borderRadius: 16,
+                padding: "18px 22px",
+                flexWrap: isMobile ? "wrap" : "nowrap",
               }}
             >
-              <div
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 999,
-                  background: C.accentSoft,
-                  color: C.accentText,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontFamily: DISPLAY,
-                  fontWeight: 700,
-                  fontSize: 15,
-                  marginBottom: 22,
-                }}
-              >
-                {i + 1}
+              <div style={{ minWidth: 0, flex: isMobile ? "1 1 220px" : "0 1 auto" }}>
+                <div style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, marginBottom: 3 }}>{f.ctaTitle}</div>
+                <div style={{ fontSize: 15, color: C.muted, fontWeight: 300 }}>{f.ctaText}</div>
               </div>
-              <h3
-                style={{
-                  fontFamily: DISPLAY,
-                  fontSize: 20,
-                  fontWeight: 600,
-                  letterSpacing: "-0.02em",
-                  margin: "0 0 10px",
-                  color: C.ink,
-                }}
-              >
-                {s.t}
-              </h3>
-              <p style={{ fontSize: 15, lineHeight: 1.62, color: C.body, margin: "0 0 20px", fontWeight: 300 }}>
-                {s.d}
-              </p>
-              <span
-                style={{
-                  display: "inline-block",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: C.accentText,
-                  background: C.accentSoft,
-                  padding: "6px 14px",
-                  borderRadius: 999,
-                }}
-              >
-                {s.time}
-              </span>
-            </Reveal>
-          ))}
+              <a href="#order" className="h-dark" style={{ ...darkBtn, marginLeft: "auto", flexShrink: 0 }}>{f.ctaBtn}</a>
+            </div>
+          </Reveal>
+          <Reveal delay={80} style={{ order: isMobile ? -1 : 1, height: isMobile ? 180 : "100%", minHeight: isMobile ? 180 : "100%" }}>
+            <Photo id={IMG.medium} alt={f.photoAlt} radius={20} style={{ height: "100%" }} />
+          </Reveal>
         </div>
       </div>
     </section>
   );
 }
 
-function Cases({ isMobile }) {
+function UseCases({ isMobile }) {
+  const { t } = useT();
+  const u = t.useCases;
   return (
-    <section style={{ padding: isMobile ? "0 20px 70px" : "0 40px 110px" }}>
-      <div
-        style={{
-          maxWidth: 1400,
-          margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: isMobile ? "1fr" : "0.85fr 1.15fr",
-          gap: isMobile ? 30 : 60,
-          alignItems: "center",
-        }}
-      >
-        <div>
-          <SectionHead eyebrow="Для чого беруть" title="Що всередині наших ящиків" />
-          <Photo
-            id={IMG.apples}
-            alt="Ящики з врожаєм"
-            w={1000}
-            ratio="4 / 3"
-            radius={28}
-            style={{ display: isMobile ? "none" : "block" }}
-          />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16 }}>
-          {CASES.map((c, i) => (
-            <Reveal
-              key={c.t}
-              delay={i * 80}
-              className="lift"
+    <section id="use-cases" style={section()}>
+      <div style={wrap}>
+        <Reveal style={{ marginBottom: 20 }}>
+          <div style={eyebrowStyle}>{u.eyebrow}</div>
+          <Title accent={u.accent}>{u.title}</Title>
+          <p style={{ fontSize: 17, lineHeight: 1.7, color: C.body, margin: 0, fontWeight: 300, maxWidth: 520 }}>{u.sub}</p>
+        </Reveal>
+        <Reveal delay={60} style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))", gap: isMobile ? 12 : 16, marginTop: 28 }}>
+          {u.items.map((x, i) => (
+            <div
+              key={i}
               style={{
                 background: C.card,
-                borderRadius: 22,
-                padding: isMobile ? "24px 22px" : "28px 26px",
+                border: `1px solid ${C.line}`,
+                borderRadius: 20,
+                padding: isMobile ? "20px 18px 22px" : "32px 32px 34px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
               }}
             >
-              <div
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 10,
-                  background: C.bgAlt,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: 16,
-                }}
-              >
-                <span style={{ width: 10, height: 10, borderRadius: 3, background: C.accent }} />
+              {/* На мобільному 2 колонки вузькі — іконка над заголовком (useIconDir з дизайну) */}
+              <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "center", gap: 14 }}>
+                <span style={{ width: 42, height: 42, borderRadius: 12, background: C.accentTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <span style={{ width: 15, height: 15, borderRadius: 4, background: C.accent }} />
+                </span>
+                <span style={{ fontFamily: DISPLAY, fontSize: isMobile ? 16 : 19, fontWeight: 600, letterSpacing: "-0.015em", lineHeight: 1.3 }}>{x.t}</span>
               </div>
-              <h3
-                style={{
-                  fontFamily: DISPLAY,
-                  fontSize: 18,
-                  fontWeight: 600,
-                  letterSpacing: "-0.02em",
-                  margin: "0 0 8px",
-                  color: C.ink,
-                }}
-              >
-                {c.t}
-              </h3>
-              <p style={{ fontSize: 14.5, lineHeight: 1.6, color: C.body, margin: 0, fontWeight: 300 }}>{c.d}</p>
-            </Reveal>
+              <p style={{ fontSize: isMobile ? 14 : 16, lineHeight: 1.65, color: "oklch(0.47 0.01 80)", margin: 0, fontWeight: 300 }}>{x.d}</p>
+            </div>
           ))}
-        </div>
+        </Reveal>
+        <Reveal delay={100} style={{ marginTop: 32 }}>
+          <Photo id={IMG.large} alt={u.photoAlt} radius={20} style={{ height: 300 }} />
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+function Process({ isMobile }) {
+  const { t } = useT();
+  const p = t.process;
+  const chip = (label, small) => (
+    <span
+      style={{
+        flexShrink: 0,
+        padding: small ? "5px 11px" : "6px 12px",
+        borderRadius: 999,
+        background: C.accentTint,
+        color: "oklch(0.48 0.13 45)",
+        fontSize: small ? 12 : 13,
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+  return (
+    <section id="process" style={section()}>
+      <div style={wrap}>
+        <Reveal style={{ marginBottom: 44 }}>
+          <div style={eyebrowStyle}>{p.eyebrow}</div>
+          <Title accent={p.accent}>{p.title}</Title>
+          <p style={{ ...subStyle, maxWidth: 560 }}>{p.sub}</p>
+        </Reveal>
+        <Reveal delay={60} style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "repeat(4, minmax(0, 1fr))", gap: 16 }}>
+          {p.steps.map((s, i) => (
+            <div key={i} style={{ position: "relative", background: C.card, borderRadius: 20, padding: "28px 26px", border: `1px solid ${C.line}`, display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "10px 12px", minWidth: 0 }}>
+                <span
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: "50%",
+                    background: "oklch(0.93 0.05 45)",
+                    color: "oklch(0.48 0.13 45)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontFamily: DISPLAY,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  {i + 1}
+                </span>
+                <h3 style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.3, flex: "1 1 140px", minWidth: 0, margin: 0 }}>{s.t}</h3>
+                {isMobile && <span style={{ marginLeft: "auto" }}>{chip(s.time, true)}</span>}
+              </div>
+              <p style={{ fontSize: 15, lineHeight: 1.6, color: C.body, margin: 0, fontWeight: 300 }}>{s.d}</p>
+              {!isMobile && <span style={{ alignSelf: "flex-start", marginTop: "auto" }}>{chip(s.time)}</span>}
+            </div>
+          ))}
+        </Reveal>
       </div>
     </section>
   );
 }
 
 function Quality({ isMobile }) {
+  const { t } = useT();
+  const q = t.quality;
   return (
-    <section id="quality" style={{ padding: isMobile ? "0 20px 70px" : "0 40px 110px" }}>
-      <div
-        style={{
-          maxWidth: 1400,
-          margin: "0 auto",
-          background: C.ink,
-          borderRadius: isMobile ? 24 : 36,
-          padding: isMobile ? "44px 26px" : "96px 80px",
-          color: C.onDark,
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1fr 1.2fr",
-            gap: isMobile ? 40 : 80,
-            alignItems: "center",
-          }}
-        >
+    <section id="quality" style={section()}>
+      <Reveal style={{ ...wrap, background: C.ink, borderRadius: 24, padding: isMobile ? "32px 24px" : "40px 36px", color: C.onDark }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1.1fr)", gap: isMobile ? 32 : 56, alignItems: "center" }}>
           <div>
-            <SectionHead
-              eyebrow="Документи"
-              title="Сертифікати та якість"
-              sub="Продукція відповідає стандартам пакувальних матеріалів для транспортування та зберігання. Повний пакет документів надаємо за запитом."
-              dark
-            />
+            <h2 style={{ fontFamily: DISPLAY, fontSize: 26, lineHeight: 1.12, fontWeight: 700, letterSpacing: "-0.03em", margin: "0 0 14px" }}>{q.title}</h2>
+            <p style={{ fontSize: 17, lineHeight: 1.65, color: C.onDarkSoft, margin: 0, fontWeight: 300 }}>{q.text}</p>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
-            {[IMG.planks, IMG.timber, IMG.wineBoxes].map((im, i) => (
-              <Reveal key={i} delay={i * 120} className="lift">
-                <Photo id={im} alt={`Виробництво, фото ${i + 1}`} w={600} ratio="3 / 4" radius={20} />
-              </Reveal>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+            {[1, 2, 3].map((n) => (
+              <div key={n} style={{ aspectRatio: "3 / 4", borderRadius: 14, background: "oklch(0.26 0.01 80)", display: "flex", alignItems: "flex-end", padding: 14 }}>
+                <span style={{ fontFamily: "monospace", fontSize: 10, color: "oklch(0.65 0.01 80)" }}>[{q.cert} {n}]</span>
+              </div>
             ))}
           </div>
         </div>
+      </Reveal>
+    </section>
+  );
+}
+
+function About({ isMobile }) {
+  const { t } = useT();
+  const a = t.about;
+  const para = { fontSize: 17, lineHeight: 1.7, color: C.lead, fontWeight: 300 };
+  return (
+    <section id="about" style={{ marginTop: 96, padding: `88px ${PAD_H}`, background: C.bgAlt }}>
+      <div style={{ ...wrap, display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 0.95fr) minmax(0, 1.05fr)", gap: isMobile ? 32 : 72, alignItems: "center" }}>
+        <Reveal>
+          <div style={eyebrowStyle}>{a.eyebrow}</div>
+          <Title accent={a.accent} style={{ fontSize: "clamp(32px, 3.6vw, 46px)", lineHeight: 1.06, letterSpacing: "-0.035em", margin: "0 0 22px" }}>
+            {a.title}
+          </Title>
+          <p style={{ ...para, margin: "0 0 14px" }}>{a.p1(t.company)}</p>
+          <p style={{ ...para, margin: 0 }}>{a.p2}</p>
+        </Reveal>
+        <Reveal delay={80} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {a.facts.map(([k, v]) => (
+            <div key={k} style={{ background: C.card, borderRadius: 16, padding: isMobile ? "16px 20px" : "18px 26px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20 }}>
+              <span style={{ fontSize: 15, color: C.body, fontWeight: 300 }}>{k}</span>
+              <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 700, textAlign: "right" }}>{v}</span>
+            </div>
+          ))}
+        </Reveal>
       </div>
     </section>
   );
 }
 
-function Faq({ isMobile, variant }) {
-  const [open, setOpen] = useState(0);
-
-  const item = (key, title, body, i, accent) => {
-    const on = open === i;
-    return (
-      <Reveal
-        key={key}
-        delay={i * 60}
-        style={{
-          background: C.card,
-          borderRadius: 20,
-          overflow: "hidden",
-          boxShadow: on ? "0 10px 34px oklch(0.2 0.01 80 / .08)" : "none",
-          transition: "box-shadow 360ms",
-          ...(accent ? { borderTop: `3px solid ${C.accent}` } : null),
-        }}
-      >
-        <button
-          onClick={() => setOpen(on ? -1 : i)}
-          aria-expanded={on}
-          style={{
-            width: "100%",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            padding: isMobile ? "20px 22px" : "24px 28px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 18,
-            textAlign: "left",
-            fontFamily: DISPLAY,
-          }}
-        >
-          <span
-            style={{
-              fontSize: isMobile ? 16 : 18,
-              fontWeight: 600,
-              letterSpacing: "-0.02em",
-              color: on ? C.accent : C.ink,
-              transition: "color 260ms",
-            }}
-          >
-            {title}
-          </span>
-          <span
-            style={{
-              flexShrink: 0,
-              width: 30,
-              height: 30,
-              borderRadius: 999,
-              background: on ? C.accent : C.bgAlt,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "transform 380ms cubic-bezier(.16,1,.3,1), background 260ms",
-              transform: on ? "rotate(135deg)" : "none",
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M6 1v10M1 6h10" stroke={on ? "#fff" : C.ink} strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </span>
-        </button>
-        <div
-          style={{
-            maxHeight: on ? 320 : 0,
-            opacity: on ? 1 : 0,
-            overflow: "hidden",
-            transition: "max-height 480ms cubic-bezier(.16,1,.3,1), opacity 340ms",
-          }}
-        >
-          <div style={{ padding: isMobile ? "0 22px 22px" : "0 28px 26px" }}>{body}</div>
-        </div>
-      </Reveal>
-    );
+function OrderForm({ isMobile }) {
+  const { t } = useT();
+  const o = t.order;
+  const empty = { name: "", phone: "", email: "", note: "", website: "" };
+  const [f, setF] = useState(empty);
+  const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState(null); // код помилки: name | contact | phone | email | send
+  const set = (k) => (e) => {
+    setF((s) => ({ ...s, [k]: e.target.value }));
+    if (err) setErr(null);
   };
 
-  const lastIdx = FAQ.length;
+  const submit = async (e) => {
+    e.preventDefault();
+    if (sending) return;
+    const { error } = validateLead(f);
+    if (error) return setErr(error);
+    setErr(null);
+    setSending(true);
+    try {
+      const r = await fetch("/api/lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(f),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.ok) throw new Error(data.error || r.status);
+      setSent(true);
+    } catch {
+      setErr("send");
+    } finally {
+      setSending(false);
+    }
+  };
 
-  return (
-    <section id="faq" style={{ padding: isMobile ? "0 20px 70px" : "0 40px 110px" }}>
-      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        <SectionHead eyebrow="Питання клієнтів" title="Умови співпраці" />
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1.28fr 0.72fr",
-            gap: isMobile ? 24 : 60,
-            alignItems: "start",
-          }}
-        >
-          <div style={{ display: "grid", gap: 12 }}>
-            {FAQ.map((f, i) =>
-              item(
-                f.q,
-                f.q,
-                <p
-                  style={{
-                    fontSize: 15.5,
-                    lineHeight: 1.66,
-                    color: C.body,
-                    margin: 0,
-                    fontWeight: 300,
-                    maxWidth: 680,
-                  }}
-                >
-                  {f.a}
-                </p>,
-                i,
-                false
-              )
-            )}
-
-            {/* "Не знайшли відповідь" — окрема картка, навмисно вирізняється на тлі акордеона */}
-            <Reveal delay={lastIdx * 60}>
-              <div
-                style={{
-                  background: C.card,
-                  borderRadius: 20,
-                  padding: isMobile ? "26px 24px" : "30px 32px",
-                  borderTop: `3px solid ${C.accent}`,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 24,
-                  flexWrap: "wrap",
-                }}
-              >
-                <div
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 12,
-                    background: C.accentSoft,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      d="M21 11.5a8.5 8.5 0 01-12.36 7.57L4 20l1.05-4.24A8.5 8.5 0 1121 11.5z"
-                      fill="none"
-                      stroke={C.accentText}
-                      strokeWidth="1.8"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
-                <div style={{ flex: "1 1 240px" }}>
-                  <h3
-                    style={{
-                      fontFamily: DISPLAY,
-                      fontSize: 18,
-                      fontWeight: 600,
-                      letterSpacing: "-0.02em",
-                      margin: "0 0 4px",
-                      color: C.ink,
-                    }}
-                  >
-                    Не знайшли відповідь?
-                  </h3>
-                  <p style={{ fontSize: 14.5, lineHeight: 1.5, color: C.body, margin: 0, fontWeight: 300 }}>
-                    Опишіть вантаж — підкажемо розмір і конструкцію під ваше завдання.
-                  </p>
-                </div>
-                {variant.contact === "form" ? (
-                  <Btn href="#contact" variant="dark" size="sm" style={{ flexShrink: 0 }}>
-                    Поставити питання
-                  </Btn>
-                ) : (
-                  <a
-                    href={PHONE_HREF}
-                    style={{
-                      fontFamily: DISPLAY,
-                      fontSize: 20,
-                      fontWeight: 700,
-                      letterSpacing: "-0.02em",
-                      color: C.ink,
-                      textDecoration: "none",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {PHONE_TEXT}
-                  </a>
-                )}
-              </div>
-            </Reveal>
-          </div>
-
-          {/* Фото заповнює простір праворуч замість порожнечі */}
-          {!isMobile && (
-            <div style={{ position: "sticky", top: 100 }}>
-              <Photo id={IMG.apples} alt="Ящики з врожаєм на виробництві" w={800} ratio="3 / 4" radius={28} />
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-
-
-
-/* ---------- Контакт: два варіанти ---------- */
-
-function ContactForm({ isMobile }) {
-  const [f, setF] = useState({ name: "", phone: "", note: "" });
-  const [sent, setSent] = useState(false);
-  const [err, setErr] = useState("");
-  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
-
-  const submit = useCallback(() => {
-    if (!f.name.trim()) return setErr("Вкажіть імʼя, щоб знати, до кого звертатись.");
-    if (f.phone.replace(/\D/g, "").length < 9) return setErr("Перевірте номер — здається, бракує цифр.");
-    setErr("");
-    setSent(true);
-  }, [f]);
+  const errText = { name: o.errName, contact: o.errContact, phone: o.errPhone, email: o.errEmail, send: o.errSend }[err];
+  // Підсвічуємо саме ті поля, через які форма не пройшла.
+  const bad = (k) => err === k || (err === "contact" && (k === "phone" || k === "email"));
+  const errBorder = "oklch(0.62 0.16 30)";
 
   const field = {
-    width: "100%",
-    padding: "15px 18px",
-    background: C.bg,
-    border: `1.5px solid ${C.line}`,
-    borderRadius: 14,
+    padding: "13px 16px",
+    borderRadius: 12,
+    border: "1px solid oklch(0.91 0.008 85)",
+    background: "oklch(0.985 0.006 85)",
     fontFamily: BODY,
-    fontSize: 15.5,
+    fontSize: 15,
     color: C.ink,
-    outline: "none",
+    width: "100%",
+    transition: "border-color 200ms ease",
   };
+  const label = { display: "grid", gap: 6, fontSize: 14, color: "oklch(0.4 0.01 80)" };
 
   return (
-    <section id="contact" style={{ padding: isMobile ? "0 20px 70px" : "0 40px 110px" }}>
-      <div
+    <section id="order" style={{ padding: `96px ${PAD_H}` }}>
+      <Reveal
         style={{
-          maxWidth: 1400,
-          margin: "0 auto",
-          borderRadius: isMobile ? 24 : 36,
-          overflow: "hidden",
-          background: C.card,
+          ...wrap,
           display: "grid",
-          gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+          gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1fr)",
+          background: C.card,
+          border: `1px solid ${C.line}`,
+          borderRadius: 24,
+          overflow: "hidden",
         }}
       >
-        <div
-          style={{
-            padding: isMobile ? "40px 26px" : "72px 60px",
-            background: C.ink,
-            color: C.onDark,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-          }}
-        >
-          <Eyebrow dark>Заявка на прорахунок</Eyebrow>
-          <h2
-            style={{
-              fontFamily: DISPLAY,
-              fontSize: "clamp(30px, 4.6vw, 50px)",
-              lineHeight: 1.08,
-              fontWeight: 700,
-              letterSpacing: "-0.035em",
-              margin: "0 0 20px",
-            }}
-          >
-            Назвемо точну ціну
+        <div style={{ background: C.ink, color: C.onDark, padding: isMobile ? "32px 24px" : 36, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div style={{ ...eyebrowStyle, color: "oklch(0.72 0.11 45)", marginBottom: 16 }}>{o.eyebrow}</div>
+          <h2 style={{ fontFamily: DISPLAY, fontSize: isMobile ? 28 : 31, lineHeight: 1.12, fontWeight: 700, letterSpacing: "-0.03em", margin: "0 0 16px" }}>
+            {o.title}
             <br />
-            <span style={{ color: C.accent }}>за один дзвінок</span>
+            <span style={{ color: "oklch(0.75 0.11 45)" }}>{o.accent}</span>
           </h2>
-          <p style={{ fontSize: 17, lineHeight: 1.62, color: C.onDarkSoft, margin: "0 0 34px", fontWeight: 300 }}>
-            Скажіть розмір і кількість — почуєте ціну й термін виготовлення відразу. Не знаєте
-            розмір? Опишіть вантаж, підберемо самі.
-          </p>
-          <a
-            href={PHONE_HREF}
-            style={{
-              fontFamily: DISPLAY,
-              fontSize: isMobile ? 26 : 34,
-              fontWeight: 700,
-              letterSpacing: "-0.02em",
-              color: C.onDark,
-              textDecoration: "none",
-            }}
-          >
+          <p style={{ fontSize: 17, lineHeight: 1.65, color: C.onDarkSoft, margin: "0 0 32px", fontWeight: 300 }}>{o.text}</p>
+          <a {...phoneProps(t)} className="h-phone" style={{ fontFamily: DISPLAY, fontSize: isMobile ? 24 : "clamp(20px, 2.2vw, 30px)", fontWeight: 700, letterSpacing: "-0.02em", whiteSpace: "nowrap", color: C.onDark }}>
             {PHONE_TEXT}
           </a>
-          <div style={{ fontSize: 14.5, color: C.onDarkSoft, marginTop: 12 }}>Пн–Пт, 9:00–18:00</div>
+          <div style={{ fontSize: 14, color: "oklch(0.62 0.01 80)", marginTop: 10 }}>{o.hours}</div>
+
+          <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid oklch(1 0 0 / 0.1)" }}>
+            <div style={{ fontSize: 14, color: "oklch(0.7 0.01 80)", marginBottom: 12 }}>{o.messengers}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {MESSENGERS.map((m) => (
+                <a
+                  key={m.id}
+                  href={m.href}
+                  {...(isExternal(m.href) && { target: "_blank", rel: "noopener noreferrer" })}
+                  className="h-msg"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 16px 10px 12px",
+                    borderRadius: 999,
+                    background: "oklch(1 0 0 / 0.08)",
+                    border: "1px solid oklch(1 0 0 / 0.12)",
+                    color: C.onDark,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    "--brand": m.color,
+                  }}
+                >
+                  <span style={{ color: m.color, display: "flex" }}>
+                    <MessengerIcon m={m} />
+                  </span>
+                  {m.name}
+                </a>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <div
-          style={{
-            padding: isMobile ? "32px 26px" : "56px 56px",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-          }}
-        >
+        <div style={{ padding: isMobile ? "28px 24px" : "32px 36px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
           {sent ? (
-            <div style={{ textAlign: "center", padding: "20px 0" }}>
-              <div
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 999,
-                  background: C.accentSoft,
-                  margin: "0 auto 20px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    d="M5 12.5l4.5 4.5L19 7.5"
-                    fill="none"
-                    stroke={C.accent}
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-              <h3
-                style={{
-                  fontFamily: DISPLAY,
-                  fontSize: 24,
-                  fontWeight: 600,
-                  letterSpacing: "-0.02em",
-                  color: C.ink,
-                  margin: "0 0 10px",
-                }}
-              >
-                Заявку прийнято
-              </h3>
-              <p style={{ fontSize: 15.5, color: C.body, margin: 0, fontWeight: 300 }}>
-                Передзвонимо на {f.phone} протягом 15 хвилин у робочий час.
-              </p>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 12 }}>
+              <div style={{ width: 44, height: 44, borderRadius: "50%", background: "oklch(0.93 0.06 145)", color: "oklch(0.42 0.13 145)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>✓</div>
+              <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600 }}>{o.okTitle}</div>
+              <p style={{ fontSize: 15, color: C.body, fontWeight: 300, margin: 0 }}>{o.okText(f.phone.trim(), f.email.trim())}</p>
               <button
-                onClick={() => {
-                  setSent(false);
-                  setF({ name: "", phone: "", note: "" });
-                }}
-                style={{
-                  marginTop: 22,
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  fontFamily: BODY,
-                  fontSize: 14.5,
-                  fontWeight: 600,
-                  color: C.accentText,
-                }}
+                onClick={() => { setSent(false); setF(empty); }}
+                style={{ marginTop: 4, background: "none", border: "none", cursor: "pointer", fontFamily: BODY, fontSize: 14, fontWeight: 600, color: C.accentText, padding: 0 }}
               >
-                Надіслати ще одну
+                {o.again}
               </button>
             </div>
           ) : (
-            <div style={{ display: "grid", gap: 16 }}>
-              <div>
-                <label style={{ fontSize: 13.5, color: C.muted, display: "block", marginBottom: 8 }}>Ваше імʼя</label>
-                <input className="fi" style={field} value={f.name} onChange={set("name")} placeholder="Олександр" />
-              </div>
-              <div>
-                <label style={{ fontSize: 13.5, color: C.muted, display: "block", marginBottom: 8 }}>Телефон</label>
-                <input
-                  className="fi"
-                  style={field}
-                  value={f.phone}
-                  onChange={set("phone")}
-                  placeholder="+38 (0__) ___-__-__"
-                  inputMode="tel"
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 13.5, color: C.muted, display: "block", marginBottom: 8 }}>Що потрібно</label>
-                <textarea
-                  className="fi"
-                  style={{ ...field, minHeight: 96, resize: "vertical" }}
-                  value={f.note}
-                  onChange={set("note")}
-                  placeholder="Наприклад: середні ящики, 300 шт, під яблука, доставка у Львів"
-                />
-              </div>
-              {err && (
-                <div
-                  style={{
-                    fontSize: 14,
-                    color: C.accentDeep,
-                    background: C.accentSoft,
-                    padding: "12px 16px",
-                    borderRadius: 12,
-                  }}
-                >
-                  {err}
+            <form onSubmit={submit} noValidate style={{ display: "grid", gap: 16 }}>
+              {/* Honeypot від спам-ботів: прихований від людей і скрінрідерів */}
+              <input
+                type="text"
+                name="website"
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                value={f.website}
+                onChange={set("website")}
+                style={{ position: "absolute", left: -9999, width: 1, height: 1, opacity: 0 }}
+              />
+              <label style={label}>
+                {o.name}
+                <input type="text" autoComplete="name" aria-invalid={bad("name")} style={{ ...field, ...(bad("name") && { borderColor: errBorder }) }} value={f.name} onChange={set("name")} placeholder={o.namePh} />
+              </label>
+
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1fr)", gap: isMobile ? 16 : 12 }}>
+                  <label style={label}>
+                    {o.phone}
+                    <input type="tel" autoComplete="tel" inputMode="tel" aria-invalid={bad("phone")} style={{ ...field, ...(bad("phone") && { borderColor: errBorder }) }} value={f.phone} onChange={set("phone")} placeholder={o.phonePh} />
+                  </label>
+                  <label style={label}>
+                    {o.email}
+                    <input type="email" autoComplete="email" inputMode="email" aria-invalid={bad("email")} style={{ ...field, ...(bad("email") && { borderColor: errBorder }) }} value={f.email} onChange={set("email")} placeholder={o.emailPh} />
+                  </label>
                 </div>
-              )}
-              <Btn onClick={submit} variant="accent" style={{ width: "100%" }}>
-                Отримати прорахунок
-              </Btn>
-              <div style={{ fontSize: 13, color: C.soft, textAlign: "center" }}>
-                Передзвонюємо за 15 хвилин · без спаму
+                <div style={{ fontSize: 13, color: C.soft }}>{o.contactHint}</div>
               </div>
-            </div>
+
+              <label style={label}>
+                {o.need}
+                <textarea rows={3} style={{ ...field, resize: "vertical" }} value={f.note} onChange={set("note")} placeholder={o.needPh} />
+              </label>
+              {err && (
+                <div role="alert" style={{ fontSize: 14, color: C.accentDeep, background: C.accentSoft, padding: "10px 14px", borderRadius: 12 }}>{errText}</div>
+              )}
+              <button
+                type="submit"
+                disabled={sending}
+                className="h-accent"
+                style={{
+                  padding: "15px 24px",
+                  borderRadius: 999,
+                  border: "none",
+                  cursor: sending ? "progress" : "pointer",
+                  background: C.accent,
+                  color: "oklch(0.99 0.005 85)",
+                  fontFamily: DISPLAY,
+                  fontSize: 16,
+                  fontWeight: 700,
+                  opacity: sending ? 0.75 : 1,
+                  transition: "background 200ms ease, opacity 200ms ease",
+                }}
+              >
+                {sending ? o.sending : o.submit}
+              </button>
+              <div style={{ fontSize: 13, color: C.soft, textAlign: "center" }}>{o.note}</div>
+            </form>
           )}
         </div>
-      </div>
+      </Reveal>
     </section>
   );
 }
 
-function ContactPhone({ isMobile }) {
+function Footer() {
+  const { t } = useT();
   return (
-    <section id="contact" style={{ padding: isMobile ? "0 20px 70px" : "0 40px 110px" }}>
-      <div
-        style={{
-          maxWidth: 1400,
-          margin: "0 auto",
-          borderRadius: isMobile ? 24 : 36,
-          overflow: "hidden",
-          position: "relative",
-          background: C.ink,
-        }}
-      >
-        <Photo
-          id={IMG.warehouse}
-          alt=""
-          w={1900}
-          zoom={false}
-          style={{ position: "absolute", inset: 0, height: "100%" }}
-          imgStyle={{ opacity: 0.28 }}
-        />
-        <div
-          style={{
-            position: "relative",
-            textAlign: "center",
-            padding: isMobile ? "56px 24px" : "110px 40px",
-            color: C.onDark,
-          }}
-        >
-          <div style={{ display: "inline-block", textAlign: "left" }}>
-            <Eyebrow dark>Зв'язок</Eyebrow>
+    <footer style={{ padding: `28px ${PAD_H}`, borderTop: "1px solid oklch(0.93 0.006 85)" }}>
+      <div style={{ ...wrap, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14, fontSize: 13, color: C.muted }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 20, height: 20, borderRadius: 6, background: C.ink }} />
+          <span style={{ fontFamily: DISPLAY, fontWeight: 600, color: C.ink }}>{t.company}</span>
+        </div>
+        <div>{t.address}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            {MESSENGERS.map((m) => (
+              <a
+                key={m.id}
+                href={m.href}
+                aria-label={m.name}
+                title={m.name}
+                {...(isExternal(m.href) && { target: "_blank", rel: "noopener noreferrer" })}
+                className="h-foot-msg"
+                style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: C.card, border: `1px solid ${C.line}`, color: m.color }}
+              >
+                <MessengerIcon m={m} size={18} />
+              </a>
+            ))}
           </div>
-          <h2
-            style={{
-              fontFamily: DISPLAY,
-              fontSize: "clamp(30px, 5.2vw, 56px)",
-              lineHeight: 1.08,
-              fontWeight: 700,
-              letterSpacing: "-0.035em",
-              margin: "0 0 20px",
-            }}
-          >
-            Назвемо точну ціну
-            <br />
-            за один дзвінок
-          </h2>
-          <p
-            style={{
-              fontSize: isMobile ? 16.5 : 19,
-              color: C.onDarkSoft,
-              margin: "0 auto 44px",
-              maxWidth: 520,
-              fontWeight: 300,
-              lineHeight: 1.6,
-            }}
-          >
-            Скажіть розмір і кількість — почуєте ціну й термін виготовлення відразу. Не знаєте
-            розмір? Опишіть вантаж, підберемо самі.
-          </p>
-          <a
-            href={PHONE_HREF}
-            className="btn"
-            style={{
-              display: "inline-block",
-              padding: isMobile ? "20px 34px" : "26px 56px",
-              borderRadius: 999,
-              background: C.accent,
-              color: "oklch(0.99 0.005 85)",
-              fontFamily: DISPLAY,
-              fontWeight: 700,
-              fontSize: isMobile ? 22 : 30,
-              letterSpacing: "-0.02em",
-              textDecoration: "none",
-              boxShadow: "0 10px 34px oklch(0.62 0.13 45 / .34)",
-            }}
-          >
-            {PHONE_TEXT}
-          </a>
-          <div style={{ fontSize: 15, color: C.onDarkSoft, marginTop: 22 }}>Пн–Пт, 9:00–18:00</div>
+          <div>© {new Date().getFullYear()} {t.company}</div>
         </div>
-      </div>
-    </section>
-  );
-}
-
-
-function About({ isMobile }) {
-  const facts = [
-    ["Власне виробництво", PRODUCTION_AREA],
-    ["Географія поставок", "Вся Україна"],
-    ["Форма оплати", "Нал / безнал"],
-    ["Мінімальне замовлення", "від 5 шт"],
-  ];
-  return (
-    <section id="about" style={{ padding: isMobile ? "0 20px 70px" : "0 40px 110px" }}>
-      <div
-        style={{
-          maxWidth: 1400,
-          margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-          gap: isMobile ? 32 : 80,
-          alignItems: "start",
-        }}
-      >
-        <div>
-          <SectionHead eyebrow="Про компанію" title="Працюємо напряму" />
-          <p style={{ fontSize: 18, lineHeight: 1.7, color: "oklch(0.42 0.01 80)", margin: "0 0 20px", fontWeight: 300 }}>
-            «{COMPANY_NAME}» — виробник дерев'яних ящиків для бізнесу: аграрних підприємств, логістичних
-            компаній та виробництв. Без посередників, тому ціна нижча за ринкову.
-          </p>
-          <p style={{ fontSize: 18, lineHeight: 1.7, color: "oklch(0.42 0.01 80)", margin: 0, fontWeight: 300 }}>
-            Приймаємо як разові замовлення, так і довгострокові контракти на постачання з фіксованим
-            графіком відвантажень.
-          </p>
-        </div>
-        <div style={{ display: "grid", gap: 16 }}>
-          {facts.map(([k, v], i) => (
-            <Reveal
-              key={k}
-              delay={i * 90}
-              style={{
-                background: C.card,
-                borderRadius: 24,
-                padding: isMobile ? "24px 26px" : "30px 36px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 24,
-              }}
-            >
-              <span style={{ fontSize: 16, color: "oklch(0.42 0.01 80)", fontWeight: 300 }}>{k}</span>
-              <span style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: C.ink }}>{v}</span>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Footer({ isMobile }) {
-  return (
-    <footer style={{ padding: isMobile ? "32px 20px 96px" : "40px", borderTop: `1px solid ${C.line}` }}>
-      <div
-        style={{
-          maxWidth: 1400,
-          margin: "0 auto",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: 16,
-          fontSize: 14,
-          color: C.muted,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 24, height: 24, borderRadius: 8, background: C.ink }} />
-          <span style={{ fontFamily: DISPLAY, fontWeight: 600, color: C.ink }}>{COMPANY_NAME}</span>
-        </div>
-        <div>{COMPANY_ADDRESS}</div>
-        <div>© {new Date().getFullYear()} {COMPANY_NAME}</div>
       </div>
     </footer>
   );
 }
 
-function MobileBar({ variant }) {
-  const [show, setShow] = useState(false);
-  useEffect(() => {
-    const on = () => setShow(window.scrollY > 520);
-    on();
-    window.addEventListener("scroll", on, { passive: true });
-    return () => window.removeEventListener("scroll", on);
-  }, []);
-  return (
-    <div
-      style={{
-        position: "fixed",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 90,
-        padding: 12,
-        display: "flex",
-        gap: 10,
-        background: "oklch(0.985 0.006 85 / .92)",
-        backdropFilter: "blur(14px)",
-        borderTop: `1px solid ${C.line}`,
-        transform: show ? "none" : "translateY(115%)",
-        transition: "transform 420ms cubic-bezier(.16,1,.3,1)",
-      }}
-    >
-      {variant.contact === "form" && (
-        <Btn href="#contact" variant="white" size="sm" style={{ flex: 1 }}>
-          Заявка
-        </Btn>
-      )}
-      <Btn href={PHONE_HREF} variant="accent" size="sm" style={{ flex: 1.3 }}>
-        Зателефонувати
-      </Btn>
-    </div>
-  );
-}
-
-/* ---------- перемикач варіантів для показу клієнту ---------- */
-
-function Switcher({ variant, setVariant }) {
-  const [open, setOpen] = useState(false);
-  const opt = (active, label, onClick) => (
-    <button
-      key={label}
-      onClick={onClick}
-      style={{
-        flex: 1,
-        padding: "8px 10px",
-        borderRadius: 999,
-        border: "none",
-        cursor: "pointer",
-        fontFamily: BODY,
-        fontSize: 12.5,
-        fontWeight: 600,
-        background: active ? C.ink : "transparent",
-        color: active ? C.onDark : C.muted,
-        transition: "background 220ms, color 220ms",
-      }}
-    >
-      {label}
-    </button>
-  );
-  return (
-    <div style={{ position: "fixed", right: 16, bottom: 16, zIndex: 120 }}>
-      {open && (
-        <div
-          style={{
-            background: C.card,
-            borderRadius: 20,
-            padding: 16,
-            marginBottom: 10,
-            width: 230,
-            boxShadow: "0 18px 50px oklch(0.2 0.01 80 / .22)",
-          }}
-        >
-          <div style={{ fontSize: 12, color: C.soft, marginBottom: 8 }}>Спосіб звʼязку</div>
-          <div style={{ display: "flex", gap: 4, background: C.bgAlt, borderRadius: 999, padding: 4 }}>
-            {opt(variant.contact === "form", "Форма", () => setVariant({ ...variant, contact: "form" }))}
-            {opt(variant.contact === "phone", "Телефон", () => setVariant({ ...variant, contact: "phone" }))}
-          </div>
-        </div>
-      )}
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-label="Перемкнути варіант сторінки"
-        style={{
-          width: 48,
-          height: 48,
-          borderRadius: 999,
-          border: "none",
-          cursor: "pointer",
-          background: C.ink,
-          color: C.onDark,
-          boxShadow: "0 10px 30px oklch(0.2 0.01 80 / .28)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginLeft: "auto",
-        }}
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M4 8h11M4 16h7"
-            stroke={C.onDark}
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-          <circle cx="18" cy="8" r="2.6" fill="none" stroke={C.accent} strokeWidth="2" />
-          <circle cx="14" cy="16" r="2.6" fill="none" stroke={C.accent} strokeWidth="2" />
-        </svg>
-      </button>
-    </div>
-  );
-}
-
 export default function App() {
-  const isMobile = useMedia("(max-width: 900px)");
-  const [variant, setVariant] = useState(DEFAULT_VARIANT);
+  const isMobile = useMedia("(max-width: 819px)");
+  // Від 1360px поруч із 8 пунктами меню вміщається кнопка з повним номером телефону.
+  const isWide = useMedia("(min-width: 1360px)");
+  const [lang, setLangState] = useState(readLang);
+  const t = T[lang];
+
+  const setLang = useCallback((l) => {
+    setLangState(l);
+    try {
+      localStorage.setItem("lang", l);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    document.title = t.meta.title;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", t.meta.description);
+  }, [lang, t]);
 
   return (
-    <div style={{ fontFamily: BODY, background: C.bg, color: C.ink, width: "100%", overflowX: "hidden" }}>
-      <style>{CSS}</style>
-      <Header isMobile={isMobile} />
-      <Hero isMobile={isMobile} variant={variant} />
-      <Marquee />
-      <Advantages isMobile={isMobile} />
-      <Catalog isMobile={isMobile} />
-      <Process isMobile={isMobile} />
-      <Cases isMobile={isMobile} />
-      <Quality isMobile={isMobile} />
-      <Faq isMobile={isMobile} variant={variant} />
-      {variant.contact === "form" ? (
-        <ContactForm isMobile={isMobile} />
-      ) : (
-        <ContactPhone isMobile={isMobile} />
-      )}
-      <About isMobile={isMobile} />
-      <Footer isMobile={isMobile} />
-      {isMobile && <MobileBar variant={variant} />}
-      {SHOW_SWITCHER && <Switcher variant={variant} setVariant={setVariant} />}
-    </div>
+    <LangCtx.Provider value={{ t, lang, setLang }}>
+      <div style={{ fontFamily: BODY, color: C.ink, background: C.bg, width: "100%", overflowX: "clip" }}>
+        <style>{CSS}</style>
+        <Header isMobile={isMobile} isWide={isWide} />
+        <main>
+          <Hero isMobile={isMobile} />
+          <PhotoStats isMobile={isMobile} />
+          <Marquee />
+          <Advantages isMobile={isMobile} />
+          <Catalog isMobile={isMobile} />
+          {/* «Як працюємо»: кроки → під які задачі → питання */}
+          <Process isMobile={isMobile} />
+          <UseCases isMobile={isMobile} />
+          <Faq isMobile={isMobile} />
+          <Quality isMobile={isMobile} />
+          <About isMobile={isMobile} />
+          <OrderForm isMobile={isMobile} />
+        </main>
+        <Footer />
+        <Toast />
+      </div>
+    </LangCtx.Provider>
   );
 }
