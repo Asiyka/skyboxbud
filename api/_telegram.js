@@ -28,9 +28,9 @@ export const STATUSES = {
   declined: { emoji: "❌", title: "Відмова", label: "Відмова", tag: "відмова", group: "closed" },
 };
 
-/* «⏰ Пізніше» — не кнопка, а видиме посилання в тексті заявки (APP_MARK): inline_keyboard web_app
-   не працюють в каналах (Telegram ігнорує їх мовчки). Текстове посилання — підтвердження
-   лише першого разу (домен кешується), далі — відкривається без запиту. */
+/* «⏰ Нагадати» — кнопка типу url з t.me-посиланням на міні-застосунок.
+   web_app не працює в каналах; url-кнопка працює, але Telegram щоразу просить
+   підтвердження переходу на зовнішній сайт. */
 const LAYOUT = [
   ["called", "noanswer"],
   ["deal", "declined"],
@@ -110,14 +110,15 @@ async function miniAppUrl(env, leadId, client) {
     : `t.me/${bot}?startapp=${param}`;
 }
 
-/** Кнопки під заявкою. */
-export function leadKeyboard(current) {
+/** Кнопки під заявкою. appUrl — якщо є, додає url-кнопку «⏰ Нагадати». */
+export function leadKeyboard(current, appUrl) {
   const rows = LAYOUT.map((row) =>
     row.map((key) => {
       const s = STATUSES[key];
       return { text: `${key === current ? "✔︎ " : ""}${s.emoji} ${s.label}`, callback_data: `st:${key}` };
     })
   );
+  if (appUrl) rows.push([{ text: "⏰ Нагадати", url: `https://${appUrl}` }]);
   rows.push([{ text: "📝 Нотатка", callback_data: "nt" }]);
   return { inline_keyboard: rows };
 }
@@ -217,14 +218,15 @@ export function leadMessage(lead) {
 }
 
 async function editLead(env, chat, id, m) {
-  m.app = esc(await miniAppUrl(env, id, clientName(m)));
+  const appUrl = await miniAppUrl(env, id, clientName(m));
+  m.app = null; // посилання в кнопці, в тексті більше не потрібне
   return call(env, "editMessageText", {
     chat_id: chat,
     message_id: id,
     text: render(m),
     parse_mode: "HTML",
     disable_web_page_preview: true,
-    reply_markup: leadKeyboard(m.status),
+    reply_markup: leadKeyboard(m.status, appUrl),
   });
 }
 
