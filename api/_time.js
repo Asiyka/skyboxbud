@@ -41,13 +41,20 @@ export function kyivAt(y, m, d, h = 10, min = 0) {
 
 
 
-/** «сьогодні о 14:30» / «завтра о 10:00» / «30.10 о 10:00» */
+/** «30.10 о 10:00» — абсолютна дата: для тексту, що лишається в заявці (не застаріває). */
+export function fmtAt(ms) {
+  const time = kyiv(ms, { hour: "2-digit", minute: "2-digit" });
+  const sameYear = kyivParts(ms).y === kyivParts().y;
+  return `${kyiv(ms, { day: "2-digit", month: "2-digit", ...(sameYear ? {} : { year: "numeric" }) })} о ${time}`;
+}
+
+/** «сьогодні о 14:30» / «завтра о 10:00» / «30.10 о 10:00» — лише для миттєвих відповідей:
+    у збереженому тексті «завтра» вже наступного дня бреше. */
 export function fmtWhen(ms) {
   const time = kyiv(ms, { hour: "2-digit", minute: "2-digit" });
   if (kyivDay(ms) === kyivDay(Date.now())) return `сьогодні о ${time}`;
   if (kyivDay(ms) === kyivDay(Date.now() + DAY)) return `завтра о ${time}`;
-  const sameYear = kyivParts(ms).y === kyivParts().y;
-  return `${kyiv(ms, { day: "2-digit", month: "2-digit", ...(sameYear ? {} : { year: "numeric" }) })} о ${time}`;
+  return fmtAt(ms);
 }
 
 /** Компактна дата для списку нагадувань: «30.10 10:00». */

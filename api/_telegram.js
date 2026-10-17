@@ -11,7 +11,7 @@
      TELEGRAM_WEBHOOK_SECRET — секрет для вебхука Telegram і для /api/cron
    ============================================================ */
 
-import { MIN, HOUR, kyiv, kyivAt, fmtWhen, fmtShort, parseShort } from "./_time.js";
+import { MIN, HOUR, kyiv, kyivAt, fmtAt, fmtWhen, fmtShort, parseShort } from "./_time.js";
 
 export const GROUPS = {
   open: { tag: "відкрита", dot: "🟠" },
@@ -313,7 +313,7 @@ export async function runReminders(env, chat = env.TELEGRAM_CHAT_ID) {
   const due = board.entries.filter((e) => e.at <= Date.now() + 30 * 1000);
   if (!due.length) return { sent: 0, pending: board.entries.length };
   for (const e of due) {
-    await quiet(
+    const sent = await quiet(
       call(env, "sendMessage", {
         chat_id: chat,
         text: `🔔 <b>Нагадування: передзвонити</b> — ${esc(e.name)}\n<i>Тапніть на цитату, щоб відкрити заявку.</i>`,
@@ -321,6 +321,16 @@ export async function runReminders(env, chat = env.TELEGRAM_CHAT_ID) {
         reply_parameters: { message_id: e.id, allow_sending_without_reply: true },
       })
     );
+    // Відповідь повертає саму заявку — знімаємо з неї «🔔 …», щоб не висіло вже минуле нагадування.
+    const lead = sent?.reply_to_message;
+    if (isLead(lead)) {
+      const m = parse(lead);
+      if (m.remind) {
+        m.history.push(`• ${stamp()} · 🔔 нагадування надіслано (${m.remind})`);
+        m.remind = null;
+        await quiet(editLead(env, chat, e.id, m));
+      }
+    }
   }
   const ids = new Set(due.map((e) => e.id));
   await updateBoard(env, chat, (list) => list.filter((e) => !ids.has(e.id)));
@@ -347,13 +357,14 @@ async function isAdmin(env, chat, userId) {
 async function applyStatus(env, chat, id, m, status, remindAt, who) {
   const s = STATUSES[status];
   const wasLater = m.status === "later";
-  const when = remindAt ? fmtWhen(remindAt) : null;
+  // У заявці — абсолютна дата: «завтра о 10:00» назавтра (напр. після нової нотатки) вже бреше.
+  const at = remindAt ? fmtAt(remindAt) : null;
   m.status = status;
-  m.remind = when;
-  m.history.push(`• ${stamp()} · ${esc(who)} — ${s.emoji} ${s.label}${when ? ` (нагадати ${when})` : ""}`);
+  m.remind = at;
+  m.history.push(`• ${stamp()} · ${esc(who)} — ${s.emoji} ${s.label}${at ? ` (нагадати ${at})` : ""}`);
   await editLead(env, chat, id, m);
   if (remindAt || wasLater) await setReminder(env, chat, id, remindAt, clientName(m));
-  return remindAt ? `🔔 Нагадаю ${when}` : `${s.emoji} ${s.label}`;
+  return remindAt ? `🔔 Нагадаю ${fmtWhen(remindAt)}` : `${s.emoji} ${s.label}`;
 }
 
 /** Запит у каналі «напишіть нотатку…» — наступне повідомлення адміна бот забере собі. */
@@ -408,14 +419,16 @@ async function onButton(cq, env) {
 export async function setReminderFromApp(env, leadId, t, user, chat = env.TELEGRAM_CHAT_ID) {
   if (!(await isAdmin(env, chat, user.id))) return { ok: false, error: "Ставити нагадування можуть лише адміністратори каналу" };
 
-  // «Без нагадування» — просто статус «Пізніше»
+  // «Без нагадування» — просто статус «Пізніше».
+  // Службову відповідь (нею читаємо заявку) прибираємо одразу: підтвердження показує сам застосунок,
+  // а не канал — раніше застосунок чекав 2,5 с і «Нагадаю…» зникало ще до того, як він закривався.
   if (t.none) {
-    const r = await readMessage(env, chat, leadId, "✅ Позначено «Пізніше»");
-    if (!r || !isLead(r.original)) return { ok: false, error: "Заявку не знайдено — можливо, її видалили" };
+    const r = await readMessage(env, chat, leadId);
+    if (!r) return { ok: false, error: "Заявку не знайдено — можливо, її видалили" };
     try {
+      if (!isLead(r.original)) return { ok: false, error: "Заявку не знайдено — можливо, її видалили" };
       await applyStatus(env, chat, leadId, parse(r.original), "later", null, fullName(user));
     } finally {
-      await sleep(THANKS_DELAY);
       await del(env, chat, r.probe.message_id);
     }
     return { ok: true };
@@ -428,17 +441,15 @@ export async function setReminderFromApp(env, leadId, t, user, chat = env.TELEGR
   if (at < Math.floor(Date.now() / MIN) * MIN + MIN) return { ok: false, error: "Цей час уже минув — оберіть пізніший" };
   if (at > Date.now() + 400 * 24 * HOUR) return { ok: false, error: "Задалеко — оберіть дату в межах року" };
 
-  // «Дякую» одночасно читає заявку (відповідь на неї повертає її вміст).
-  const r = await readMessage(env, chat, leadId, `✅ Нагадаю ${fmtWhen(at)}`);
-  if (!r || !isLead(r.original)) return { ok: false, error: "Заявку не знайдено — можливо, її видалили" };
+  const r = await readMessage(env, chat, leadId);
+  if (!r) return { ok: false, error: "Заявку не знайдено — можливо, її видалили" };
   try {
+    if (!isLead(r.original)) return { ok: false, error: "Заявку не знайдено — можливо, її видалили" };
     await applyStatus(env, chat, leadId, parse(r.original), "later", at, fullName(user));
   } catch (e) {
     if (e.message === "board-full") return { ok: false, error: `Заплановано вже ${BOARD_MAX} нагадувань — це максимум. Закрийте старі заявки.` };
     throw e;
   } finally {
-    // Підтвердження в каналі ненадовго — щоб було видно, що спрацювало.
-    await sleep(THANKS_DELAY);
     await del(env, chat, r.probe.message_id);
   }
   return { ok: true, when: fmtWhen(at) };

@@ -366,8 +366,7 @@ a { color: ${C.accent}; text-decoration: none; }
 a:hover { color: oklch(0.45 0.13 45); }
 ::selection { background: oklch(0.88 0.08 45); }
 html { scroll-behavior: smooth; }
-section[id] { scroll-margin-top: 84px; }
-@media (max-width: 819px) { section[id] { scroll-margin-top: 128px; } }
+section[id] { scroll-margin-top: calc(84px + env(safe-area-inset-top, 0px)); }
 
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .marquee-track { animation: marquee 32s linear infinite; }
@@ -519,11 +518,25 @@ function Header({ isMobile, isWide }) {
     return () => ro.disconnect();
   }, [lang, isMobile, isWide]);
 
-  const navMask = !overflow
-    ? "none"
-    : isMobile
-    ? "linear-gradient(to right, black calc(100% - 26px), transparent 100%)"
-    : "linear-gradient(to right, transparent 0, black 18px, black calc(100% - 18px), transparent 100%)";
+  // Мобільне меню («гамбургер»): закривається пунктом меню, тапом поза шапкою або Escape.
+  const headerRef = useRef(null);
+  const [menu, setMenu] = useState(false);
+  useEffect(() => {
+    if (!isMobile) setMenu(false);
+  }, [isMobile]);
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e) => e.key === "Escape" && setMenu(false);
+    const onDown = (e) => !headerRef.current?.contains(e.target) && setMenu(false);
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown);
+    };
+  }, [menu]);
+
+  const navMask = overflow ? "linear-gradient(to right, transparent 0, black 18px, black calc(100% - 18px), transparent 100%)" : "none";
   // Повний номер у кнопці — лише на широких екранах, інакше іконка (звільняє місце для меню).
   const phoneCompact = isMobile || !isWide;
 
@@ -551,7 +564,7 @@ function Header({ isMobile, isWide }) {
         flex: "1 1 auto",
         gap: 2,
         alignItems: "center",
-        justifyContent: isMobile && !overflow ? "space-between" : "flex-start",
+        justifyContent: "flex-start",
         borderRadius: 999,
         overflowX: "auto",
         minWidth: 0,
@@ -587,16 +600,83 @@ function Header({ isMobile, isWide }) {
     </nav>
   );
 
+  const mobileMenu = (
+    <nav
+      id="mobile-menu"
+      aria-hidden={!menu}
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: "calc(100% + 12px)",
+        display: "grid",
+        gap: 2,
+        padding: 6,
+        borderRadius: 20,
+        background: C.card,
+        border: `1px solid ${C.line}`,
+        boxShadow: "0 16px 40px oklch(0.2 0.01 80 / 0.14)",
+        opacity: menu ? 1 : 0,
+        transform: menu ? "none" : "translateY(-8px)",
+        visibility: menu ? "visible" : "hidden",
+        transition: `opacity 200ms ease, transform 280ms ${EASE_OUT}, visibility 0s linear ${menu ? 0 : 280}ms`,
+      }}
+    >
+      {NAV.map((k) => {
+        const on = active === k;
+        return (
+          <a
+            key={k}
+            href={`#${SECTION_ID[k]}`}
+            onClick={() => setMenu(false)}
+            tabIndex={menu ? 0 : -1}
+            aria-current={on ? "true" : undefined}
+            className="h-nav"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "14px 16px",
+              borderRadius: 14,
+              fontSize: 16,
+              fontWeight: 500,
+              color: on ? C.ink : C.text2,
+              background: on ? C.chip : "transparent",
+            }}
+          >
+            {t.nav[k]}
+            {on && <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.accent }} />}
+          </a>
+        );
+      })}
+    </nav>
+  );
+
+  // Три риски, що перетворюються на «×»
+  const bar = (i) => ({
+    position: "absolute",
+    left: 13,
+    width: 18,
+    height: 2,
+    borderRadius: 2,
+    background: "currentColor",
+    top: 21 + (menu ? 0 : (i - 1) * 6),
+    opacity: menu && i === 1 ? 0 : 1,
+    transform: menu && i !== 1 ? `rotate(${i === 0 ? 45 : -45}deg)` : "none",
+    transition: `top 240ms ${EASE_OUT}, transform 240ms ${EASE_OUT}, opacity 160ms ease`,
+  });
+
   return (
     <header
+      ref={headerRef}
       style={{
         position: "sticky",
         top: 0,
         zIndex: 60,
-        padding: `16px ${PAD_H}`,
-        background: "oklch(0.982 0.007 84 / 0.9)",
-        backdropFilter: "blur(14px)",
-        WebkitBackdropFilter: "blur(14px)",
+        // safe-area: на iPad/iPhone з viewport-fit=cover шапка заходить під статус-бар,
+        // тож над нею більше не просвічує контент сторінки
+        padding: `calc(16px + env(safe-area-inset-top, 0px)) ${PAD_H} 16px`,
+        background: C.bg,
       }}
     >
       <div style={{ maxWidth: 1440, margin: "0 auto" }}>
@@ -611,6 +691,31 @@ function Header({ isMobile, isWide }) {
           {!isMobile && <div style={{ flex: "0 1 auto", minWidth: 0, margin: "0 auto", display: "flex" }}>{nav}</div>}
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "0 0 auto" }}>
+            {isMobile && (
+              <button
+                onClick={() => setMenu((v) => !v)}
+                aria-label={menu ? t.menuClose : t.menuOpen}
+                aria-expanded={menu}
+                aria-controls="mobile-menu"
+                className="h-lang"
+                style={{
+                  position: "relative",
+                  width: 46,
+                  height: 46,
+                  padding: 0,
+                  borderRadius: 999,
+                  border: `1px solid ${C.line}`,
+                  background: C.card,
+                  color: C.ink,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                {[0, 1, 2].map((i) => (
+                  <span key={i} style={bar(i)} />
+                ))}
+              </button>
+            )}
             <a
               {...phoneProps(t)}
               className="h-dark"
@@ -676,10 +781,10 @@ function Header({ isMobile, isWide }) {
               )}
             </button>
           </div>
-        </div>
 
-        {/* На мобільному в один рядок з лого nav не вміщається — переносимо його окремим рядком */}
-        {isMobile && <div style={{ marginTop: 12 }}>{nav}</div>}
+          {/* На мобільному меню в рядок не вміщається — ховаємо під «гамбургер» */}
+          {isMobile && mobileMenu}
+        </div>
       </div>
     </header>
   );
@@ -717,14 +822,14 @@ function Hero({ isMobile }) {
       id="top"
       style={{
         padding: `0 ${PAD_H}`,
-        minHeight: isMobile ? "calc(100svh - 136px)" : "calc(100vh - 78px)",
+        minHeight: isMobile ? "calc(100svh - 78px)" : "calc(100vh - 78px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         textAlign: "center",
       }}
     >
-      <div style={{ maxWidth: 820, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 0 64px" }}>
+      <div style={{ width: "100%", maxWidth: 820, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", padding: isMobile ? "24px 0 48px" : "40px 0 64px" }}>
         <Reveal
           style={{
             display: "inline-flex",
@@ -768,16 +873,40 @@ function Hero({ isMobile }) {
           {h.lead}
         </Reveal>
 
-        <Reveal delay={160} style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
-          <a href="#catalog" className="h-dark" style={{ padding: "15px 28px", borderRadius: 999, background: C.ink, color: C.onDark, fontWeight: 600, fontSize: 15, whiteSpace: "nowrap" }}>
+        {/* На мобільному кнопки — одна під одною й однакової ширини */}
+        <Reveal
+          delay={160}
+          style={{
+            display: "flex",
+            flexDirection: isMobile ? "column" : "row",
+            gap: 12,
+            flexWrap: "wrap",
+            justifyContent: "center",
+            width: isMobile ? "min(100%, 340px)" : "auto",
+          }}
+        >
+          <a href="#catalog" className="h-dark" style={{ padding: "15px 28px", borderRadius: 999, background: C.ink, color: C.onDark, fontWeight: 600, fontSize: 15, whiteSpace: "nowrap", textAlign: "center" }}>
             {h.ctaCatalog}
           </a>
-          <a href="#order" className="h-white" style={{ padding: "15px 28px", borderRadius: 999, background: C.card, color: C.ink, fontWeight: 600, fontSize: 15, whiteSpace: "nowrap", border: `1px solid ${C.line}` }}>
+          <a href="#order" className="h-white" style={{ padding: "15px 28px", borderRadius: 999, background: C.card, color: C.ink, fontWeight: 600, fontSize: 15, whiteSpace: "nowrap", textAlign: "center", border: `1px solid ${C.line}` }}>
             {h.ctaQuote}
           </a>
         </Reveal>
 
-        <Reveal delay={210} style={{ display: "flex", alignItems: "center", gap: 18, rowGap: 12, flexWrap: "wrap", justifyContent: "center", marginTop: 28 }}>
+        {/* На мобільному — стовпчиком, щоб пункти не розповзались по краях екрана */}
+        <Reveal
+          delay={210}
+          style={{
+            display: "flex",
+            flexDirection: isMobile ? "column" : "row",
+            alignItems: isMobile ? "flex-start" : "center",
+            gap: isMobile ? 10 : 18,
+            rowGap: isMobile ? 10 : 12,
+            flexWrap: "wrap",
+            justifyContent: "center",
+            marginTop: 28,
+          }}
+        >
           {h.checks.map((c, i) => (
             <React.Fragment key={i}>
               {i > 0 && !isMobile && <span style={{ width: 5, height: 5, borderRadius: "50%", background: "oklch(0.88 0.01 82)" }} />}
@@ -1085,6 +1214,7 @@ function Gallery({ title, photos, alt, start, onClose, isMobile }) {
   }, [i]);
 
   const stop = (e) => e.stopPropagation();
+  // Десктоп: стрілки поверх фото по краях. Мобільний: окремим рядком під фото — не закривають знімок.
   const navBtn = (dir) => (
     <button
       onClick={(e) => {
@@ -1094,12 +1224,9 @@ function Gallery({ title, photos, alt, start, onClose, isMobile }) {
       aria-label={dir < 0 ? c.prevPhoto : c.nextPhoto}
       className="h-white"
       style={{
-        position: "absolute",
-        top: "50%",
-        [dir < 0 ? "left" : "right"]: isMobile ? 10 : 16,
-        transform: "translateY(-50%)",
-        width: isMobile ? 40 : 48,
-        height: isMobile ? 40 : 48,
+        ...(!isMobile && { position: "absolute", top: "50%", [dir < 0 ? "left" : "right"]: 16, transform: "translateY(-50%)" }),
+        width: isMobile ? 52 : 48,
+        height: isMobile ? 44 : 48,
         borderRadius: 14,
         border: "none",
         background: "oklch(1 0 0 / 0.95)",
@@ -1119,7 +1246,7 @@ function Gallery({ title, photos, alt, start, onClose, isMobile }) {
 
   // Фіксована рамка: однакова для всіх фото, вписується в екран і не розтягується на весь
   const frameW = isMobile ? "calc(100vw - 32px)" : "min(880px, calc(100vw - 80px))";
-  const frameH = isMobile ? "min(56vh, 420px)" : "min(62vh, 560px)";
+  const frameH = isMobile ? "min(48vh, 400px)" : "min(62vh, 560px)";
 
   return (
     <div
@@ -1180,9 +1307,16 @@ function Gallery({ title, photos, alt, start, onClose, isMobile }) {
         >
           {/* key — щоб кожне фото плавно проявлялось, а не «перестрибувало» */}
           <Photo key={photos[i]} id={photos[i]} alt={`${alt} — ${i + 1}`} fit="contain" style={{ position: "absolute", inset: 0, background: "transparent" }} />
-          {n > 1 && navBtn(-1)}
-          {n > 1 && navBtn(1)}
+          {n > 1 && !isMobile && navBtn(-1)}
+          {n > 1 && !isMobile && navBtn(1)}
         </div>
+
+        {n > 1 && isMobile && (
+          <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
+            {navBtn(-1)}
+            {navBtn(1)}
+          </div>
+        )}
 
         {/* Мініатюри: ряд завжди по центру; якщо не вміщаються — гортаються */}
         <div className="noscroll" style={{ overflowX: "auto", display: "flex", padding: 2 }}>
@@ -1621,10 +1755,10 @@ function Process({ isMobile }) {
                   {i + 1}
                 </span>
                 <h3 style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.3, flex: "1 1 140px", minWidth: 0, margin: 0 }}>{s.t}</h3>
-                {isMobile && <span style={{ marginLeft: "auto" }}>{chip(s.time, true)}</span>}
               </div>
               <p style={{ fontSize: 15, lineHeight: 1.6, color: C.body, margin: 0, fontWeight: 300 }}>{s.d}</p>
-              {!isMobile && <span style={{ alignSelf: "flex-start", marginTop: "auto" }}>{chip(s.time)}</span>}
+              {/* Термін — завжди під описом зліва: праворуч від заголовка у вузькій картці він переносився й «висів» */}
+              <span style={{ alignSelf: "flex-start", marginTop: "auto" }}>{chip(s.time, isMobile)}</span>
             </div>
           ))}
         </Reveal>
@@ -1644,10 +1778,11 @@ function Quality({ isMobile }) {
             <h2 style={{ fontFamily: DISPLAY, fontSize: 26, lineHeight: 1.12, fontWeight: 700, letterSpacing: "-0.03em", margin: "0 0 14px" }}>{q.title}</h2>
             <p style={{ fontSize: 17, lineHeight: 1.65, color: C.onDarkSoft, margin: 0, fontWeight: 300 }}>{q.text}</p>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+          {/* minmax(0, 1fr): інакше довгий підпис не дає колонці стиснутись і ряд вилазить за край картки */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: isMobile ? 10 : 14 }}>
             {[1, 2, 3].map((n) => (
-              <div key={n} style={{ aspectRatio: "3 / 4", borderRadius: 14, background: "oklch(0.26 0.01 80)", display: "flex", alignItems: "flex-end", padding: 14 }}>
-                <span style={{ fontFamily: "monospace", fontSize: 10, color: "oklch(0.65 0.01 80)" }}>[{q.cert} {n}]</span>
+              <div key={n} style={{ minWidth: 0, aspectRatio: "3 / 4", borderRadius: 14, background: "oklch(0.26 0.01 80)", display: "flex", alignItems: "flex-end", padding: isMobile ? 10 : 14 }}>
+                <span style={{ minWidth: 0, fontFamily: "monospace", fontSize: isMobile ? 9 : 10, color: "oklch(0.65 0.01 80)", overflowWrap: "anywhere" }}>[{q.cert} {n}]</span>
               </div>
             ))}
           </div>
@@ -1767,7 +1902,8 @@ function OrderForm({ isMobile }) {
 
           <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid oklch(1 0 0 / 0.1)" }}>
             <div style={{ fontSize: 14, color: "oklch(0.7 0.01 80)", marginBottom: 12 }}>{o.messengers}</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {/* На мобільному три рівні плитки (іконка над назвою) — Viber не падає сам на другий рядок */}
+            <div style={isMobile ? { display: "grid", gridTemplateColumns: `repeat(${MESSENGERS.length}, minmax(0, 1fr))`, gap: 8 } : { display: "flex", flexWrap: "wrap", gap: 8 }}>
               {MESSENGERS.map((m) => (
                 <a
                   key={m.id}
@@ -1777,13 +1913,16 @@ function OrderForm({ isMobile }) {
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: 8,
-                    padding: "10px 16px 10px 12px",
-                    borderRadius: 999,
+                    justifyContent: "center",
+                    flexDirection: isMobile ? "column" : "row",
+                    gap: isMobile ? 6 : 8,
+                    padding: isMobile ? "12px 4px 10px" : "10px 16px 10px 12px",
+                    borderRadius: isMobile ? 16 : 999,
+                    minWidth: 0,
                     background: "oklch(1 0 0 / 0.08)",
                     border: "1px solid oklch(1 0 0 / 0.12)",
                     color: C.onDark,
-                    fontSize: 14,
+                    fontSize: isMobile ? 13 : 14,
                     fontWeight: 600,
                     "--brand": m.color,
                   }}
@@ -1879,18 +2018,32 @@ function OrderForm({ isMobile }) {
   );
 }
 
-function Footer() {
+function Footer({ isMobile }) {
   const { t } = useT();
   return (
-    <footer style={{ padding: `28px ${PAD_H}`, borderTop: "1px solid oklch(0.93 0.006 85)" }}>
-      <div style={{ ...wrap, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14, fontSize: 13, color: C.muted }}>
+    <footer style={{ padding: `28px ${PAD_H} calc(28px + env(safe-area-inset-bottom, 0px))`, borderTop: "1px solid oklch(0.93 0.006 85)" }}>
+      {/* На мобільному — стовпчиком по центру: у рядку з переносом іконки й © «губились» під адресою */}
+      <div
+        style={{
+          ...wrap,
+          display: "flex",
+          flexDirection: isMobile ? "column" : "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: isMobile ? 16 : 14,
+          fontSize: 13,
+          color: C.muted,
+          textAlign: "center",
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 20, height: 20, borderRadius: 6, background: C.ink }} />
           <span style={{ fontFamily: DISPLAY, fontWeight: 600, color: C.ink }}>{t.company}</span>
         </div>
         <div>{t.address}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: "center", gap: isMobile ? 14 : 16 }}>
+          <div style={{ display: "flex", gap: isMobile ? 10 : 6 }}>
             {MESSENGERS.map((m) => (
               <a
                 key={m.id}
@@ -1899,7 +2052,7 @@ function Footer() {
                 title={m.name}
                 {...(isExternal(m.href) && { target: "_blank", rel: "noopener noreferrer" })}
                 className="h-foot-msg"
-                style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: C.card, border: `1px solid ${C.line}`, color: m.color }}
+                style={{ width: isMobile ? 40 : 34, height: isMobile ? 40 : 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: C.card, border: `1px solid ${C.line}`, color: m.color }}
               >
                 <MessengerIcon m={m} size={18} />
               </a>
@@ -1951,7 +2104,7 @@ export default function App() {
           <About isMobile={isMobile} />
           <OrderForm isMobile={isMobile} />
         </main>
-        <Footer />
+        <Footer isMobile={isMobile} />
         <Toast />
       </div>
     </LangCtx.Provider>

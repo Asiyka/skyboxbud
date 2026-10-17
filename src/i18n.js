@@ -24,6 +24,8 @@ export const T = {
     copied: "Номер скопійовано",
     copyHint: "Натисніть, щоб скопіювати номер",
     callAria: "Зателефонувати",
+    menuOpen: "Відкрити меню",
+    menuClose: "Закрити меню",
     address: "м. Місто, вул. Прикладна, 1", // TODO: реальна адреса
 
     hero: {
@@ -257,6 +259,8 @@ export const T = {
     copied: "Number copied",
     copyHint: "Click to copy the number",
     callAria: "Call",
+    menuOpen: "Open menu",
+    menuClose: "Close menu",
     address: "1 Example St, City, Ukraine", // TODO: real address
 
     hero: {
