@@ -2086,7 +2086,7 @@ function Footer({ isMobile }) {
             </div>
             {icons}
           </div>
-          <div style={{ paddingTop: 12, borderTop: `1px solid ${C.lineSoft}`, fontSize: 12, color: C.soft }}>{copy}</div>
+          <div style={{ textAlign: "center", fontSize: 12, color: C.soft }}>{copy}</div>
         </div>
       ) : (
         /* Три колонки 1fr · auto · 1fr — адреса рівно по центру, хоч бічні блоки й різної ширини */
