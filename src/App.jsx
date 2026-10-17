@@ -790,13 +790,13 @@ function Header({ isMobile, isWide }) {
   );
 }
 
-function Check({ children }) {
+function Check({ children, small }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: small ? 7 : 9 }}>
       <span
         style={{
-          width: 22,
-          height: 22,
+          width: small ? 20 : 22,
+          height: small ? 20 : 22,
           borderRadius: "50%",
           background: "oklch(0.93 0.05 45)",
           color: "oklch(0.5 0.13 45)",
@@ -809,7 +809,7 @@ function Check({ children }) {
       >
         ✓
       </span>
-      <span style={{ fontSize: 15, color: C.lead }}>{children}</span>
+      <span style={{ fontSize: small ? 14 : 15, color: C.lead, whiteSpace: "nowrap" }}>{children}</span>
     </div>
   );
 }
@@ -873,7 +873,7 @@ function Hero({ isMobile }) {
           {h.lead}
         </Reveal>
 
-        {/* На мобільному кнопки — одна під одною й однакової ширини */}
+        {/* «Звʼязатися» — головний заклик до дії: чорна й перша. На мобільному кнопки одна під одною й однакової ширини */}
         <Reveal
           delay={160}
           style={{
@@ -885,35 +885,35 @@ function Hero({ isMobile }) {
             width: isMobile ? "min(100%, 340px)" : "auto",
           }}
         >
-          <a href="#catalog" className="h-dark" style={{ padding: "15px 28px", borderRadius: 999, background: C.ink, color: C.onDark, fontWeight: 600, fontSize: 15, whiteSpace: "nowrap", textAlign: "center" }}>
-            {h.ctaCatalog}
-          </a>
-          <a href="#order" className="h-white" style={{ padding: "15px 28px", borderRadius: 999, background: C.card, color: C.ink, fontWeight: 600, fontSize: 15, whiteSpace: "nowrap", textAlign: "center", border: `1px solid ${C.line}` }}>
+          <a href="#order" className="h-dark" style={{ padding: "15px 28px", borderRadius: 999, background: C.ink, color: C.onDark, fontWeight: 600, fontSize: 15, whiteSpace: "nowrap", textAlign: "center", border: `1px solid ${C.ink}` }}>
             {h.ctaQuote}
+          </a>
+          <a href="#catalog" className="h-white" style={{ padding: "15px 28px", borderRadius: 999, background: C.card, color: C.ink, fontWeight: 600, fontSize: 15, whiteSpace: "nowrap", textAlign: "center", border: `1px solid ${C.line}` }}>
+            {h.ctaCatalog}
           </a>
         </Reveal>
 
-        {/* На мобільному — стовпчиком, щоб пункти не розповзались по краях екрана */}
-        <Reveal
-          delay={210}
-          style={{
-            display: "flex",
-            flexDirection: isMobile ? "column" : "row",
-            alignItems: isMobile ? "flex-start" : "center",
-            gap: isMobile ? 10 : 18,
-            rowGap: isMobile ? 10 : 12,
-            flexWrap: "wrap",
-            justifyContent: "center",
-            marginTop: 28,
-          }}
-        >
-          {h.checks.map((c, i) => (
-            <React.Fragment key={i}>
-              {i > 0 && !isMobile && <span style={{ width: 5, height: 5, borderRadius: "50%", background: "oklch(0.88 0.01 82)" }} />}
-              <Check>{c}</Check>
-            </React.Fragment>
-          ))}
-        </Reveal>
+        {/* На мобільному — два пункти в першому рядку, третій по центру під ними */}
+        {isMobile ? (
+          <Reveal delay={210} style={{ display: "grid", gap: 12, justifyItems: "center", marginTop: 28 }}>
+            {[h.checks.slice(0, 2), h.checks.slice(2)].map((row, r) => (
+              <div key={r} style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "10px 14px" }}>
+                {row.map((c) => (
+                  <Check key={c} small>{c}</Check>
+                ))}
+              </div>
+            ))}
+          </Reveal>
+        ) : (
+          <Reveal delay={210} style={{ display: "flex", alignItems: "center", gap: 18, rowGap: 12, flexWrap: "wrap", justifyContent: "center", marginTop: 28 }}>
+            {h.checks.map((c, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && <span style={{ width: 5, height: 5, borderRadius: "50%", background: "oklch(0.88 0.01 82)" }} />}
+                <Check>{c}</Check>
+              </React.Fragment>
+            ))}
+          </Reveal>
+        )}
       </div>
     </section>
   );
@@ -1190,7 +1190,6 @@ function Gallery({ title, photos, alt, start, onClose, isMobile }) {
   const [i, setI] = useState(start);
   const n = photos.length;
   const step = useCallback((d) => setI((v) => (v + d + n) % n), [n]);
-  const touchX = useRef(null);
   const thumbsRef = useRef(null);
 
   useEffect(() => {
@@ -1213,8 +1212,30 @@ function Gallery({ title, photos, alt, start, onClose, isMobile }) {
     thumbsRef.current?.children[i]?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
   }, [i]);
 
+  // Мобільна стрічка: індекс беремо з прокрутки; при переході з мініатюри чи клавіатури — прокручуємо самі.
+  // target — куди їде програмна прокрутка: проміжні слайди по дорозі не повинні перебивати вибір.
+  const stripRef = useRef(null);
+  const target = useRef(null);
+  const onStripScroll = () => {
+    const el = stripRef.current;
+    if (!el?.clientWidth) return;
+    const k = Math.round(el.scrollLeft / el.clientWidth);
+    if (target.current != null) {
+      if (k !== target.current) return;
+      target.current = null;
+    }
+    setI((v) => (v === k ? v : k));
+  };
+  useLayoutEffect(() => {
+    const el = stripRef.current;
+    if (!el?.clientWidth || Math.round(el.scrollLeft / el.clientWidth) === i) return;
+    const first = el.scrollLeft === 0 && i === start; // відкриття галереї — без анімації
+    target.current = first ? null : i;
+    el.scrollTo({ left: i * el.clientWidth, behavior: first ? "auto" : "smooth" });
+  }, [i, start]);
+
   const stop = (e) => e.stopPropagation();
-  // Десктоп: стрілки поверх фото по краях. Мобільний: окремим рядком під фото — не закривають знімок.
+  // Стрілки — лише на десктопі, поверх фото по краях. На телефоні гортають пальцем.
   const navBtn = (dir) => (
     <button
       onClick={(e) => {
@@ -1224,9 +1245,12 @@ function Gallery({ title, photos, alt, start, onClose, isMobile }) {
       aria-label={dir < 0 ? c.prevPhoto : c.nextPhoto}
       className="h-white"
       style={{
-        ...(!isMobile && { position: "absolute", top: "50%", [dir < 0 ? "left" : "right"]: 16, transform: "translateY(-50%)" }),
-        width: isMobile ? 52 : 48,
-        height: isMobile ? 44 : 48,
+        position: "absolute",
+        top: "50%",
+        [dir < 0 ? "left" : "right"]: 16,
+        transform: "translateY(-50%)",
+        width: 48,
+        height: 48,
         borderRadius: 14,
         border: "none",
         background: "oklch(1 0 0 / 0.95)",
@@ -1246,7 +1270,7 @@ function Gallery({ title, photos, alt, start, onClose, isMobile }) {
 
   // Фіксована рамка: однакова для всіх фото, вписується в екран і не розтягується на весь
   const frameW = isMobile ? "calc(100vw - 32px)" : "min(880px, calc(100vw - 80px))";
-  const frameH = isMobile ? "min(48vh, 400px)" : "min(62vh, 560px)";
+  const frameH = isMobile ? "min(58vh, 460px)" : "min(62vh, 560px)";
 
   return (
     <div
@@ -1290,31 +1314,36 @@ function Gallery({ title, photos, alt, start, onClose, isMobile }) {
           </div>
         </div>
 
-        <div
-          onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
-          onTouchEnd={(e) => {
-            if (touchX.current == null) return;
-            const dx = e.changedTouches[0].clientX - touchX.current;
-            if (Math.abs(dx) > 45) step(dx < 0 ? 1 : -1);
-            touchX.current = null;
-          }}
-          style={{
-            position: "relative",
-            height: frameH,
-            borderRadius: 20,
-            overflow: "hidden",
-          }}
-        >
-          {/* key — щоб кожне фото плавно проявлялось, а не «перестрибувало» */}
-          <Photo key={photos[i]} id={photos[i]} alt={`${alt} — ${i + 1}`} fit="contain" style={{ position: "absolute", inset: 0, background: "transparent" }} />
-          {n > 1 && !isMobile && navBtn(-1)}
-          {n > 1 && !isMobile && navBtn(1)}
-        </div>
-
-        {n > 1 && isMobile && (
-          <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
-            {navBtn(-1)}
-            {navBtn(1)}
+        {isMobile ? (
+          /* Мобільний: стрічка, що їде за пальцем (scroll-snap), без стрілок — як у PhotoSwipe чи Airbnb.
+             Де ми зараз — видно з лічильника «1 / 5» і підсвіченої мініатюри. */
+          <div
+            ref={stripRef}
+            onScroll={onStripScroll}
+            onTouchStart={() => (target.current = null)} // палець перебиває автопрокрутку
+            className="noscroll"
+            style={{
+              display: "flex",
+              height: frameH,
+              borderRadius: 20,
+              overflowX: "auto",
+              overflowY: "hidden",
+              scrollSnapType: "x mandatory",
+              overscrollBehaviorX: "contain",
+            }}
+          >
+            {photos.map((id, k) => (
+              <div key={k} style={{ position: "relative", flex: "0 0 100%", scrollSnapAlign: "center", scrollSnapStop: "always" }}>
+                <Photo id={id} alt={`${alt} — ${k + 1}`} fit="contain" style={{ position: "absolute", inset: 0, background: "transparent" }} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ position: "relative", height: frameH, borderRadius: 20, overflow: "hidden" }}>
+            {/* key — щоб кожне фото плавно проявлялось, а не «перестрибувало» */}
+            <Photo key={photos[i]} id={photos[i]} alt={`${alt} — ${i + 1}`} fit="contain" style={{ position: "absolute", inset: 0, background: "transparent" }} />
+            {n > 1 && navBtn(-1)}
+            {n > 1 && navBtn(1)}
           </div>
         )}
 
@@ -2020,47 +2049,56 @@ function OrderForm({ isMobile }) {
 
 function Footer({ isMobile }) {
   const { t } = useT();
+  const brand = (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ width: 20, height: 20, borderRadius: 6, background: C.ink, flexShrink: 0 }} />
+      <span style={{ fontFamily: DISPLAY, fontWeight: 600, color: C.ink }}>{t.company}</span>
+    </div>
+  );
+  const icons = (
+    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+      {MESSENGERS.map((m) => (
+        <a
+          key={m.id}
+          href={m.href}
+          aria-label={m.name}
+          title={m.name}
+          {...(isExternal(m.href) && { target: "_blank", rel: "noopener noreferrer" })}
+          className="h-foot-msg"
+          style={{ width: 36, height: 36, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: C.card, border: `1px solid ${C.line}`, color: m.color }}
+        >
+          <MessengerIcon m={m} size={18} />
+        </a>
+      ))}
+    </div>
+  );
+  const copy = <div>© {new Date().getFullYear()} {t.company}</div>;
+
   return (
-    <footer style={{ padding: `28px ${PAD_H} calc(28px + env(safe-area-inset-bottom, 0px))`, borderTop: "1px solid oklch(0.93 0.006 85)" }}>
-      {/* На мобільному — стовпчиком по центру: у рядку з переносом іконки й © «губились» під адресою */}
-      <div
-        style={{
-          ...wrap,
-          display: "flex",
-          flexDirection: isMobile ? "column" : "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: isMobile ? 16 : 14,
-          fontSize: 13,
-          color: C.muted,
-          textAlign: "center",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 20, height: 20, borderRadius: 6, background: C.ink }} />
-          <span style={{ fontFamily: DISPLAY, fontWeight: 600, color: C.ink }}>{t.company}</span>
-        </div>
-        <div>{t.address}</div>
-        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: "center", gap: isMobile ? 14 : 16 }}>
-          <div style={{ display: "flex", gap: isMobile ? 10 : 6 }}>
-            {MESSENGERS.map((m) => (
-              <a
-                key={m.id}
-                href={m.href}
-                aria-label={m.name}
-                title={m.name}
-                {...(isExternal(m.href) && { target: "_blank", rel: "noopener noreferrer" })}
-                className="h-foot-msg"
-                style={{ width: isMobile ? 40 : 34, height: isMobile ? 40 : 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: C.card, border: `1px solid ${C.line}`, color: m.color }}
-              >
-                <MessengerIcon m={m} size={18} />
-              </a>
-            ))}
+    <footer style={{ padding: `${isMobile ? 22 : 28}px ${PAD_H} calc(${isMobile ? 22 : 28}px + env(safe-area-inset-bottom, 0px))`, borderTop: "1px solid oklch(0.93 0.006 85)" }}>
+      {isMobile ? (
+        /* Мобільний — компактно в два рядки: назва з адресою й месенджери, під ними копірайт */
+        <div style={{ ...wrap, display: "grid", gap: 14, fontSize: 13, color: C.muted }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+              {brand}
+              <div>{t.address}</div>
+            </div>
+            {icons}
           </div>
-          <div>© {new Date().getFullYear()} {t.company}</div>
+          <div style={{ paddingTop: 12, borderTop: `1px solid ${C.lineSoft}`, fontSize: 12, color: C.soft }}>{copy}</div>
         </div>
-      </div>
+      ) : (
+        /* Три колонки 1fr · auto · 1fr — адреса рівно по центру, хоч бічні блоки й різної ширини */
+        <div style={{ ...wrap, display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto minmax(0, 1fr)", alignItems: "center", gap: 24, fontSize: 13, color: C.muted }}>
+          {brand}
+          <div style={{ textAlign: "center" }}>{t.address}</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 16 }}>
+            {icons}
+            {copy}
+          </div>
+        </div>
+      )}
     </footer>
   );
 }

@@ -78,9 +78,11 @@
   .done .ok { width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: var(--accent-text); display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 700; }
   .done b { font-size: 18px; }
 
-  /* Кнопка для перегляду поза Telegram (у Telegram — рідна кнопка внизу) */
-  .fallback { display: none; width: 100%; margin-top: 10px; padding: 12px; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-text); font: inherit; font-weight: 600; }
-  .fallback:disabled { opacity: 0.5; }
+  /* Своя кнопка одразу під вибором часу. Рідну MainButton Telegram завжди ставить у самий низ вікна —
+     на iPad (високе вікно) вона «прилипала» до дна далеко від цифр. */
+  .go { display: none; width: 100%; margin-top: 12px; padding: 14px; border: 0; border-radius: 14px; background: var(--accent); color: var(--accent-text); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 150ms; }
+  .go:active:not(:disabled) { transform: scale(0.99); filter: brightness(0.95); }
+  .go:disabled { opacity: 0.45; cursor: default; }
 </style>
 </head>
 <body>
@@ -129,17 +131,16 @@
   </section>
 
   <div class="hint" id="hint"></div>
-  <button class="fallback" id="fallback"></button>
+  <button class="go" id="go"></button>
 </div>
 
 <script>
 (() => {
   const tg = window.Telegram && window.Telegram.WebApp;
   const inTelegram = !!(tg && tg.initData);
-  // tg.expand() — розгортає шторку на повний екран, кнопка не висить далеко від контенту.
+  // Без tg.expand(): вікно лишається компактним (розгорнуте на iPad виходило високим і вузьким).
   // disableVerticalSwipes — прокрутка коліс часу не згортає шторку (Telegram 7.7+).
   if (tg) {
-    tg.expand();
     try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
     tg.ready();
   }
@@ -176,6 +177,7 @@
   const now = kyivNow();
   const today = { y: now.y, m: now.m, d: now.d };
   let sel = null; // обраний день
+  let sending = false; // запит на сервер у дорозі (update() бачить його ще під час ініціалізації)
   let hour = 10;
   let minute = 0;
   let view = { y: today.y, m: today.m };
@@ -183,7 +185,7 @@
 
   const $ = (id) => document.getElementById(id);
   const hint = $("hint");
-  const fallback = $("fallback");
+  const go = $("go");
 
   /* ---------- крок 1: календар ---------- */
   function renderCalendar() {
@@ -308,24 +310,18 @@
       active = !soon;
     } else hint.textContent = "";
 
-    if (inTelegram) {
-      // Неактивна кнопка — сіра: у Telegram is_active сам по собі колір не змінює, і кнопка виглядала робочою
-      const off = (tg.themeParams && tg.themeParams.hint_color) || "#b9b4ab";
-      tg.MainButton.setParams({ text: label, color: active ? "#c8693a" : off, text_color: "#ffffff", is_active: active, is_visible: step2 });
-    } else {
-      // Перегляд у браузері: кнопка лише на кроці 2, як рідна кнопка Telegram
-      fallback.textContent = label;
-      fallback.disabled = true;
-      fallback.style.display = step2 ? "block" : "none";
-    }
+    // Поза Telegram (перегляд у браузері) кнопка лише показується — надіслати без підпису Telegram не можна
+    if (!sending) go.textContent = label;
+    go.disabled = !active || !inTelegram || sending;
+    go.style.display = step2 ? "block" : "none";
   }
 
-  let sending = false;
   async function submit(none) {
     if (sending || (!none && tooSoon())) return;
     if (!inTelegram) return;
     sending = true;
-    tg.MainButton.showProgress();
+    go.disabled = true;
+    go.textContent = "Зберігаю…";
     try {
       const r = await fetch("/api/reminder", {
         method: "POST",
@@ -340,15 +336,14 @@
       $("s3").hidden = false;
       $("doneText").textContent = none ? "Позначено «Пізніше»" : `Нагадаю ${data.when}`;
       hint.textContent = "";
-      tg.MainButton.hideProgress();
-      tg.MainButton.hide();
+      go.style.display = "none";
       tg.BackButton.hide();
       setTimeout(() => tg.close(), 1400);
     } catch (e) {
-      tg.MainButton.hideProgress();
       tg.showAlert(e.message);
     } finally {
       sending = false;
+      if (!$("s2").hidden) update();
     }
   }
 
@@ -382,7 +377,7 @@
     tg.showConfirm("Позначити заявку «Пізніше» без нагадування?", (ok) => ok && submit(true));
   };
 
-  if (inTelegram) tg.MainButton.onClick(() => submit(false));
+  go.onclick = () => submit(false);
   renderCalendar();
   showStep(1);
 })();

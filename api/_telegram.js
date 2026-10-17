@@ -42,6 +42,7 @@ const NOTES_MARK = "💬 ";
 const APP_MARK = "⏰ Нагадати: ";
 const NOTE_PROMPT = "✍️ ";
 const BOARD_MARK = "📋 ";
+const TIME_MARK = "🕒 ";
 const HISTORY_MAX = 8;
 const BOARD_MAX = 100; // скільки нагадувань вміщає закріплене повідомлення (ліміт Telegram — 4096 символів)
 const TG_LIMIT = 4000;
@@ -134,15 +135,20 @@ function render(m) {
   const s = STATUSES[m.status];
   const notes = [...m.notes];
   const history = m.history.slice(-HISTORY_MAX);
+  // Час надходження — в самому кінці, під нотатками й статусом.
+  // Старі заявки мали просто «🕒 дата» — дописуємо підпис «Надійшла:».
+  const isTime = (b) => b.startsWith(TIME_MARK);
+  const time = m.body.filter(isTime).map((b) => (b.startsWith(`${TIME_MARK}<b>`) ? b : `${TIME_MARK}<b>Надійшла:</b> ${b.slice(TIME_MARK.length)}`));
+  const body = m.body.filter((b) => !isTime(b));
   const build = () => {
-    const blocks = [header(m.status), ...m.body];
+    const blocks = [header(m.status), ...body];
     if (notes.length) blocks.push(`${NOTES_MARK}<b>Нотатки:</b>\n${notes.join("\n")}`);
     const tags = [`#${s.tag}`, `#${GROUPS[s.group].tag}`, notes.length && "#нотатки"].filter(Boolean).join(" ");
     const remind = m.status === "later" && m.remind ? ` · 🔔 ${m.remind}` : "";
     const st = [`${STATUS_MARK}<b>Статус:</b> ${s.emoji} ${s.label}${remind}`, tags];
     if (m.app) st.push(`${APP_MARK}${m.app}`);
     if (history.length) st.push("<i>Історія:</i>", ...history);
-    blocks.push(st.join("\n"));
+    blocks.push(st.join("\n"), ...time);
     return blocks.join("\n\n");
   };
   let text = build();
@@ -203,7 +209,7 @@ const clientName = (m) => {
 /** Текст нової заявки (HTML). */
 export function leadMessage(lead) {
   // Користувацький текст не повинен виглядати як наші службові маркери.
-  const safe = (s) => esc(s).replace(/📌|💬|✍️|⏱|📋/g, "•");
+  const safe = (s) => esc(s).replace(/📌|💬|✍️|⏱|📋|🕒/g, "•");
   const contacts = [
     `👤 <b>Ім'я:</b> ${safe(lead.name)}`,
     lead.phone && `📞 <b>Телефон:</b> ${safe(lead.phone)}`,
@@ -212,7 +218,7 @@ export function leadMessage(lead) {
   const body = [
     contacts.join("\n"),
     lead.note && `📝 <b>Що потрібно:</b>\n${safe(lead.note).replace(/\n{2,}/g, "\n")}`,
-    `🕒 ${kyiv(Date.now(), { dateStyle: "short", timeStyle: "short" })}`,
+    `${TIME_MARK}<b>Надійшла:</b> ${kyiv(Date.now(), { dateStyle: "short", timeStyle: "short" })}`,
   ].filter(Boolean);
   return render({ status: "new", body, notes: [], history: [], remind: null });
 }
