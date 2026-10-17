@@ -2079,6 +2079,30 @@ export default function App() {
     } catch {}
   }, []);
 
+  // Якірні посилання (#catalog, #order…) прокручують сторінку, але не дописують хештег в адресу:
+  // при прокрутці він не оновлювався й лише плутав. Якщо сторінку відкрили з хештегом — прибираємо його.
+  useEffect(() => {
+    if (location.hash) {
+      const el = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+      history.replaceState(null, "", location.pathname + location.search);
+      // Після шрифтів — інакше висота блоків ще зміниться й розділ «з'їде»
+      if (el) Promise.resolve(document.fonts?.ready).then(() => requestAnimationFrame(() => el.scrollIntoView({ block: "start" })));
+    }
+    const onClick = (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = e.target.closest?.('a[href^="#"]');
+      if (!a) return;
+      const id = a.getAttribute("href").slice(1);
+      const el = id === "top" ? null : document.getElementById(id);
+      if (id !== "top" && !el) return;
+      e.preventDefault();
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      else window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
+
   useEffect(() => {
     document.documentElement.lang = lang;
     document.title = t.meta.title;
